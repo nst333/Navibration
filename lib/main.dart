@@ -23,7 +23,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   bool _submitted = false;
   bool _showMap = false;
-  List<LatLng> _routePoints = [];
+  late Map<String, dynamic> pathData;
 
   static const _animDuration = Duration(milliseconds: 500);
 
@@ -47,10 +47,52 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       final places = await TmapService.foundLatLngByName(value);
       if (places.isEmpty) return;
 
+      TmapService.showDestinationDialog(context, places);
 
 
-      // TODO : cPos -> latlng
-      // TODO : path find
+      bool serviceEnabled;
+      LocationPermission permission;
+
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          // TODO : 위치 서비스 꺼진거 알리기
+        });
+        return;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            // TODO : 위치 권한 거부 안됨 알리기
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          // TODO : 위치 권한 영구 거부 안됨 알리기
+        });
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+
+
+      pathData = (await TmapService.fetchPedestrianRoute(
+          startLat: position.latitude,
+          startLng: position.longitude,
+
+          endLat: TmapService.selectedPos.latitude,
+          endLng: TmapService.selectedPos.longitude
+      ))!;
+
+      // TODO : 경로 표시 -> MapPage 불러올 때 쓰기
 
       setState(() {
         _submitted = true;
@@ -95,7 +137,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
             AnimatedOpacity(
               duration: Duration(milliseconds: _animDuration.inMilliseconds + 200),
               opacity: _showMap ? 1 : 0,
-              child: MapPage(routePoints: _routePoints,),
+              child: MapPage(routePoints: pathData["linePoints"],),
             ),
 
             // 로고
@@ -275,7 +317,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                           children: [
                             ElevatedButton(
                               onPressed: () {
-                                // 버튼 클릭 시 동작
+                                // TODO : 안내 시작 (블루투스 통신)
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Color.fromRGBO(79, 235, 76, 1),
@@ -312,15 +354,46 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
 class TmapService {
   static const _appKey = 'oTTP497zZS5eps0zfeuTJ16mujxhkO2Y6DSF3k05';
+  static String selectedName = "";
+  static LatLng selectedPos = LatLng(0, 0);
 
-  static void showDestinationDialog(BuildContext context) {
+  static void showDestinationDialog(BuildContext context, List<Map<String, LatLng>> places) {
     showDialog(
       context: context,
-      builder: (BuildContext ctx) {
-        return AlertDialog(
-          content: Text("목적지를 선택하세요"),
-          actions: [
-          ],
+      builder: (context) {
+        return Dialog(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.7,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.white
+            ),
+            child: Column(
+              children: [
+                ListView.builder(
+                  itemCount: places.length,
+                  itemBuilder: (context, index) {
+                    return Container(
+                      height: 100,
+                      child: GestureDetector(
+                        child: Column(
+                            children: [
+                              Text(places[index].keys.first.split("|||").first, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                              Text(places[index].keys.first.split("|||").last, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w300),)
+                            ],
+                        ),
+                        onTap: () {
+                          selectedName = places[index].keys.first.split("|||").first;
+                          selectedPos = places[index].values.first;
+                          Navigator.pop(context);
+                        },
+                      )
+                    );
+                  },
+                )
+              ],
+            ),
+          ),
         );
       }
     );
@@ -409,41 +482,39 @@ class TmapService {
     try {
       final response = await http.post(uri, headers: headers, body: body);
       if (response.statusCode != 200) return null;
+      final data = jsonDecode(response.body);
 
-      final json = jsonDecode(response.body);
-      final features = json['features'] as List<dynamic>;
-      if (features.isEmpty) return null;
+      final features = data["features"];
 
-      final props = features.first['properties'];
-      final double distanceKm = (props['totalDistance'] as num) / 1000;
-      final double durationMin = (props['totalTime'] as num) / 60;
+      List<String> descriptions = [];
+      List<List<LatLng>> linePoints = [];
 
-      final List<Map<String, double>> polyline = [];
-      final List<Map<String, dynamic>> markers = [];
+      double totalKm = double.parse(features[0]["properties"]["totalDistance"]) / 1000;
+      double totalHour = double.parse(features[0]["properties"]["totalTime"]) / 60;
 
-      for (var f in features) {
-        final geom = f['geometry'];
-        if (geom['type'] == 'LineString') {
-          final coords = geom['coordinates'] as List;
-          for (var coord in coords) {
-            polyline.add({'lat': coord[1], 'lng': coord[0]});
-          }
-        } else if (geom['type'] == 'Point') {
-          final props = f['properties'];
-          markers.add({
-            'lat': geom['coordinates'][1],
-            'lng': geom['coordinates'][0],
-            'pointType': props['pointType'],
-          });
+      for (final feature in features) {
+        // Point면 설명 모으기
+        // LineString이면 PolyLine용 포인트 모으기
+
+        if (feature["geometry"]["type"] == "Point") {
+          descriptions.add(feature["properties"]["description"]);
+        }
+        else if (feature["geometry"]["type"] == "LineString") {
+          final coordinates = feature["geometry"]["coordinates"];
+          linePoints.add(
+            [
+              LatLng(double.parse(coordinates[0][1]), double.parse(coordinates[0][0])),
+              LatLng(double.parse(coordinates[1][1]), double.parse(coordinates[1][0]))
+            ]
+          );
         }
       }
 
       return {
-        'distanceKm': distanceKm,
-        'durationMin': durationMin,
-        'polyline': polyline,
-        'markers': markers,
-        'features': features,
+        'totalKm' : totalKm,
+        'totalHour' : totalHour,
+        'descriptions' : descriptions,
+        'linePoints' : linePoints
       };
     } catch (e) {
       print('경로 요청 실패: $e');

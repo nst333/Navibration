@@ -1,0 +1,516 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98393445877568,
+        37.56498551554059
+      ]
+    },
+    "properties": {
+      "totalDistance": 563,
+      "totalTime": 466,
+      "index": 0,
+      "pointIndex": 0,
+      "name": "",
+      "description": "29m 이동",
+      "direction": "",
+      "nearPoiName": "",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "11",
+      "facilityName": "",
+      "turnType": 200,
+      "pointType": "SP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98393445877568,
+          37.56498551554059
+        ],
+        [
+          126.98425665124321,
+          37.56499940859596
+        ]
+      ]
+    },
+    "properties": {
+      "index": 1,
+      "lineIndex": 0,
+      "name": "",
+      "description": ", 29m",
+      "distance": 29,
+      "time": 21,
+      "roadType": 0,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98425665124321,
+        37.56499940859596
+      ]
+    },
+    "properties": {
+      "index": 2,
+      "pointIndex": 1,
+      "name": "미스터빈대떡 명동점",
+      "description": "미스터빈대떡 명동점에서 좌회전 후 보행자도로를 따라 106m 이동",
+      "direction": "",
+      "nearPoiName": "미스터빈대떡 명동점",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "11",
+      "facilityName": "",
+      "turnType": 12,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98425665124321,
+          37.56499940859596
+        ],
+        [
+          126.98425942436346,
+          37.56515494611588
+        ],
+        [
+          126.98422330773393,
+          37.565466020408024
+        ],
+        [
+          126.98418997303348,
+          37.56562155727992
+        ],
+        [
+          126.98414552634672,
+          37.56584375286811
+        ],
+        [
+          126.98414274583324,
+          37.56594929610142
+        ]
+      ]
+    },
+    "properties": {
+      "index": 3,
+      "lineIndex": 1,
+      "name": "보행자도로",
+      "description": "보행자도로, 106m",
+      "distance": 106,
+      "time": 82,
+      "roadType": 22,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98414274583324,
+        37.56594929610142
+      ]
+    },
+    "properties": {
+      "index": 4,
+      "pointIndex": 2,
+      "name": "세븐일레븐 명동채원점",
+      "description": "세븐일레븐 명동채원점에서 우회전 후 을지로를 따라 148m 이동",
+      "direction": "",
+      "nearPoiName": "세븐일레븐 명동채원점",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "11",
+      "facilityName": "",
+      "turnType": 13,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98414274583324,
+          37.56594929610142
+        ],
+        [
+          126.98424551432427,
+          37.56594652049067
+        ],
+        [
+          126.98436772533061,
+          37.56594930013845
+        ],
+        [
+          126.9854676247814,
+          37.56596042969487
+        ],
+        [
+          126.98556761566921,
+          37.5659604314892
+        ],
+        [
+          126.98572871202092,
+          37.56596321183491
+        ],
+        [
+          126.98582314770209,
+          37.56596876843922
+        ]
+      ]
+    },
+    "properties": {
+      "index": 5,
+      "lineIndex": 2,
+      "name": "을지로",
+      "description": "을지로, 148m",
+      "distance": 148,
+      "time": 136,
+      "roadType": 22,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98582314770209,
+        37.56596876843922
+      ]
+    },
+    "properties": {
+      "index": 6,
+      "pointIndex": 3,
+      "name": "",
+      "description": "횡단보도 후 보행자도로를 따라 7m 이동",
+      "direction": "",
+      "nearPoiName": "",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "15",
+      "facilityName": "",
+      "turnType": 211,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98582314770209,
+          37.56596876843922
+        ],
+        [
+          126.98589536326463,
+          37.56597154718997
+        ]
+      ]
+    },
+    "properties": {
+      "index": 7,
+      "lineIndex": 3,
+      "name": "보행자도로",
+      "description": "보행자도로, 7m",
+      "distance": 7,
+      "time": 4,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "15",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98589536326463,
+        37.56597154718997
+      ]
+    },
+    "properties": {
+      "index": 8,
+      "pointIndex": 4,
+      "name": "",
+      "description": "직진 후 을지로를 따라 114m 이동",
+      "direction": "",
+      "nearPoiName": "",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "11",
+      "facilityName": "",
+      "turnType": 11,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98589536326463,
+          37.56597154718997
+        ],
+        [
+          126.98612311997228,
+          37.56598266109643
+        ],
+        [
+          126.98637031935259,
+          37.56599377535185
+        ],
+        [
+          126.98718968849894,
+          37.5660160096948
+        ]
+      ]
+    },
+    "properties": {
+      "index": 9,
+      "lineIndex": 4,
+      "name": "을지로",
+      "description": "을지로, 114m",
+      "distance": 114,
+      "time": 82,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98718968849894,
+          37.5660160096948
+        ],
+        [
+          126.98722024134892,
+          37.566013232788286
+        ],
+        [
+          126.98726746029085,
+          37.56597712672298
+        ],
+        [
+          126.98727857054682,
+          37.56597157201272
+        ]
+      ]
+    },
+    "properties": {
+      "index": 10,
+      "lineIndex": 5,
+      "name": "삼일대로",
+      "description": "삼일대로, 10m",
+      "distance": 10,
+      "time": 37,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98727857054682,
+        37.56597157201272
+      ]
+    },
+    "properties": {
+      "index": 11,
+      "pointIndex": 5,
+      "name": "을지지하쇼핑센터",
+      "description": "을지지하쇼핑센터에서 좌측 횡단보도 후 보행자도로를 따라 46m 이동",
+      "direction": "",
+      "nearPoiName": "을지지하쇼핑센터",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "15",
+      "facilityName": "",
+      "turnType": 212,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.98727857054682,
+          37.56597157201272
+        ],
+        [
+          126.9878035223938,
+          37.565982691253076
+        ]
+      ]
+    },
+    "properties": {
+      "index": 12,
+      "lineIndex": 6,
+      "name": "보행자도로",
+      "description": "보행자도로, 46m",
+      "distance": 46,
+      "time": 31,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "15",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.9878035223938,
+        37.565982691253076
+      ]
+    },
+    "properties": {
+      "index": 13,
+      "pointIndex": 6,
+      "name": "",
+      "description": "좌회전 후 삼일대로를 따라 14m 이동",
+      "direction": "",
+      "nearPoiName": "",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "",
+      "facilityType": "11",
+      "facilityName": "",
+      "turnType": 12,
+      "pointType": "GP"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.9878035223938,
+          37.565982691253076
+        ],
+        [
+          126.9878118547318,
+          37.56599102376709
+        ],
+        [
+          126.98783685182445,
+          37.56601324385431
+        ],
+        [
+          126.9879368424764,
+          37.5660215780133
+        ]
+      ]
+    },
+    "properties": {
+      "index": 14,
+      "lineIndex": 7,
+      "name": "삼일대로",
+      "description": "삼일대로, 14m",
+      "distance": 14,
+      "time": 10,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.9879368424764,
+          37.5660215780133
+        ],
+        [
+          126.98894508290752,
+          37.566057703021166
+        ]
+      ]
+    },
+    "properties": {
+      "index": 15,
+      "lineIndex": 8,
+      "name": "을지로",
+      "description": "을지로, 89m",
+      "distance": 89,
+      "time": 63,
+      "roadType": 21,
+      "categoryRoadType": 0,
+      "facilityType": "11",
+      "facilityName": ""
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Point",
+      "coordinates": [
+        126.98894508290752,
+        37.566057703021166
+      ]
+    },
+    "properties": {
+      "index": 16,
+      "pointIndex": 7,
+      "name": "도착지",
+      "description": "도착",
+      "direction": "",
+      "nearPoiName": "도착지",
+      "nearPoiX": "0.0",
+      "nearPoiY": "0.0",
+      "intersectionName": "도착지",
+      "facilityType": "",
+      "facilityName": "",
+      "turnType": 201,
+      "pointType": "EP"
+    }
+  }
+]
