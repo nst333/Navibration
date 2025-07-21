@@ -31,16 +31,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    _focusNode.addListener(() {
-      if (!_focusNode.hasFocus && _controller.text.isNotEmpty) {
-        if (!_focusNode.hasFocus && _controller.text.isNotEmpty) {
-          _onSearchSubmitted(_controller.value.text);
-        }
-
-        setState(() => _submitted = true);
-      }
-    });
-
     _controller.addListener(() {
       if (_controller.text.isEmpty && _submitted) {
         setState(() {
@@ -51,40 +41,16 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     });
   }
 
-  Future<void> _onSearchSubmitted(String value) async {
+  Future<void> _onSearchSubmitted(String keyword) async {
+    String value = _controller.text;
     if (value.isNotEmpty) {
-      final results = await TmapService.foundLatLngByName(value);
-      if (results.isEmpty) return;
+      final places = await TmapService.foundLatLngByName(value);
+      if (places.isEmpty) return;
 
-      final selection = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (_) => SimpleDialog(
-          title: const Text('목적지를 선택하세요'),
-          children: results.map((res) => SimpleDialogOption(
-            child: Text(res['name'] as String),
-            onPressed: () => Navigator.pop(context, res),
-          )).toList(),
-        ),
-      );
-      if (selection == null) return;
 
-      final endLat = selection['lat'] as double;
-      final endLng = selection['lng'] as double;
 
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      final startLat = position.latitude;
-      final startLng = position.longitude;
-
-      final routeData = await TmapService.fetchPedestrianRoute(
-        startLat: startLat,
-        startLng: startLng,
-        endLat: endLat,
-        endLng: endLng,
-      );
-      if (routeData == null) return;
-
-      final coords = routeData['features'][0]['geometry']['coordinates'] as List;
-      _routePoints = coords.map((pt) => LatLng(pt[1] as double, pt[0] as double)).toList();
+      // TODO : cPos -> latlng
+      // TODO : path find
 
       setState(() {
         _submitted = true;
@@ -140,13 +106,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 duration: _animDuration,
                 child: Align(
                   alignment: Alignment.topCenter,
-                  child: Container(
-                    child: Image.asset(
-                      'assets/images/icon_0.png',
-                      width: 200,
-                      height: 200,
-                      fit: BoxFit.cover,
-                    ),
+                  child: Image.asset(
+                    'assets/images/icon_0.png',
+                    width: 200,
+                    height: 200,
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),
@@ -209,7 +173,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                 )
                               ],
                             ),
-                            isDense: true,
                             filled: true,
                             fillColor: fillColor,
                             enabledBorder: OutlineInputBorder(
@@ -220,7 +183,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(10),
                               borderSide: BorderSide(color: Color.fromRGBO(0, 58, 255, 1), width: 1.5),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                           onSubmitted: _onSearchSubmitted,
                         ),
@@ -237,7 +199,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
-                        elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(60),
                         ),
@@ -336,8 +297,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                             )
                           ],
                         )
-
-
                       ],
                     )
                   ),
@@ -354,8 +313,21 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 class TmapService {
   static const _appKey = 'oTTP497zZS5eps0zfeuTJ16mujxhkO2Y6DSF3k05';
 
+  static void showDestinationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          content: Text("목적지를 선택하세요"),
+          actions: [
+          ],
+        );
+      }
+    );
+  }
+
   /// 키워드로 POI를 검색해 [이름, 주소, 위도, 경도] 맵의 리스트를 반환
-  static Future<List<Map<String, dynamic>>> foundLatLngByName(String keyword) async {
+  static Future<List<Map<String, LatLng>>> foundLatLngByName(String keyword) async {
     if (keyword.isEmpty) return [];
 
     final uri = Uri.https(
@@ -377,22 +349,22 @@ class TmapService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final pois = data['searchPoiInfo']['pois']['poi'] as List;
+        final pois = data["searchPoiInfo"]["pois"]["poi"];
+        List<Map<String, LatLng>> result = [];
 
-        return pois.map((poi) {
-          return {
-            'name': poi['name'],
-            'address': poi['upperAddrName'] +
-                ' ' +
-                poi['middleAddrName'] +
-                ' ' +
-                poi['lowerAddrName'] +
-                ' ' +
-                poi['detailAddrName'],
-            'lat': double.tryParse(poi['frontLat'] ?? '') ?? 0.0,
-            'lng': double.tryParse(poi['frontLon'] ?? '') ?? 0.0,
-          };
-        }).toList();
+        // 이름 ||| uA + mA + lA
+        for (final poi in pois) {
+          String key = poi["name"] + "|||" + (
+            poi["upperAddrName"] + " " +
+              poi["middleAddrName"] + " " +
+              poi["lowerAddrName"]
+          );
+          LatLng value = LatLng(double.parse(poi["pnsLat"]), double.parse(poi["pnsLng"]));
+
+          result.add({key: value});
+        }
+
+        return result;
       } else {
         print('API 오류: ${response.statusCode}');
         return [];
@@ -430,47 +402,52 @@ class TmapService {
       'endX': endLng.toString(),
       'endY': endLat.toString(),
       'reqCoordType': 'WGS84GEO',
-      'resCoordType': 'EPSG3857',
       'startName': '출발지',
       'endName': '도착지',
     };
 
-    final response = await http.post(uri, headers: headers, body: body);
-    if (response.statusCode != 200) return null;
+    try {
+      final response = await http.post(uri, headers: headers, body: body);
+      if (response.statusCode != 200) return null;
 
-    final json = jsonDecode(response.body);
-    final features = json['features'] as List<dynamic>;
-    if (features.isEmpty) return null;
+      final json = jsonDecode(response.body);
+      final features = json['features'] as List<dynamic>;
+      if (features.isEmpty) return null;
 
-    final props = features.first['properties'];
-    final double distanceKm = (props['totalDistance'] as num) / 1000;
-    final double durationMin = (props['totalTime'] as num) / 60;
+      final props = features.first['properties'];
+      final double distanceKm = (props['totalDistance'] as num) / 1000;
+      final double durationMin = (props['totalTime'] as num) / 60;
 
-    final List<Map<String, double>> polyline = [];
-    final List<Map<String, dynamic>> markers = [];
+      final List<Map<String, double>> polyline = [];
+      final List<Map<String, dynamic>> markers = [];
 
-    for (var f in features) {
-      final geom = f['geometry'];
-      if (geom['type'] == 'LineString') {
-        final coords = geom['coordinates'] as List;
-        for (var coord in coords) {
-          polyline.add({'lat': coord[1], 'lng': coord[0]});
+      for (var f in features) {
+        final geom = f['geometry'];
+        if (geom['type'] == 'LineString') {
+          final coords = geom['coordinates'] as List;
+          for (var coord in coords) {
+            polyline.add({'lat': coord[1], 'lng': coord[0]});
+          }
+        } else if (geom['type'] == 'Point') {
+          final props = f['properties'];
+          markers.add({
+            'lat': geom['coordinates'][1],
+            'lng': geom['coordinates'][0],
+            'pointType': props['pointType'],
+          });
         }
-      } else if (geom['type'] == 'Point') {
-        final props = f['properties'];
-        markers.add({
-          'lat': geom['coordinates'][1],
-          'lng': geom['coordinates'][0],
-          'pointType': props['pointType'],
-        });
       }
-    }
 
-    return {
-      'distanceKm': distanceKm,
-      'durationMin': durationMin,
-      'polyline': polyline,
-      'markers': markers,
-    };
+      return {
+        'distanceKm': distanceKm,
+        'durationMin': durationMin,
+        'polyline': polyline,
+        'markers': markers,
+        'features': features,
+      };
+    } catch (e) {
+      print('경로 요청 실패: $e');
+      return null;
+    }
   }
 }
