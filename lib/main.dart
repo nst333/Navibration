@@ -23,7 +23,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   bool _submitted = false;
   bool _showMap = false;
-  late Map<String, dynamic> pathData;
+  Map<String, dynamic>? pathData;
 
   static const _animDuration = Duration(milliseconds: 500);
 
@@ -55,9 +55,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
       serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() {
-          // TODO : 위치 서비스 꺼진거 알리기
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('위치 서비스가 비활성화되어 있습니다.'),
+          ),
+        );
         return;
       }
 
@@ -65,17 +67,21 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() {
-            // TODO : 위치 권한 거부 안됨 알리기
-          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('위치 권한이 거부되었습니다.'),
+            ),
+          );
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          // TODO : 위치 권한 영구 거부 안됨 알리기
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('위치 권ahan이 영구적으로 거부되었습니다.'),
+          ),
+        );
         return;
       }
 
@@ -84,21 +90,24 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       );
 
 
-      pathData = (await TmapService.fetchPedestrianRoute(
+      final routeData = await TmapService.fetchPedestrianRoute(
           startLat: position.latitude,
           startLng: position.longitude,
 
           endLat: TmapService.selectedPos.latitude,
           endLng: TmapService.selectedPos.longitude
-      ))!;
+      );
 
-      // TODO : 경로 표시 -> MapPage 불러올 때 쓰기
+      if (routeData != null) {
+        pathData = routeData;
+        // TODO : 경로 표시 -> MapPage 불러올 때 쓰기
 
-      setState(() {
-        _submitted = true;
-        _showMap = true;
-      });
-      _focusNode.unfocus();
+        setState(() {
+          _submitted = true;
+          _showMap = true;
+        });
+        _focusNode.unfocus();
+      }
 
     } else {
       setState(() {
@@ -116,7 +125,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 
   void onPressStar() {
-    print("Star Pressed");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('즐겨찾기 기능은 아직 준비 중입니다.'),
+      ),
+    );
   }
 
   @override
@@ -137,7 +150,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
             AnimatedOpacity(
               duration: Duration(milliseconds: _animDuration.inMilliseconds + 200),
               opacity: _showMap ? 1 : 0,
-              child: MapPage(routePoints: pathData["linePoints"],),
+              child: MapPage(routePoints: pathData?["linePoints"] ?? [],),
             ),
 
             // 로고
@@ -317,7 +330,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                           children: [
                             ElevatedButton(
                               onPressed: () {
-                                // TODO : 안내 시작 (블루투스 통신)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('안내 시작 기능은 아직 준비 중입니다.'),
+                                  ),
+                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Color.fromRGBO(79, 235, 76, 1),
@@ -370,26 +387,28 @@ class TmapService {
             ),
             child: Column(
               children: [
-                ListView.builder(
-                  itemCount: places.length,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      height: 100,
-                      child: GestureDetector(
-                        child: Column(
-                            children: [
-                              Text(places[index].keys.first.split("|||").first, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
-                              Text(places[index].keys.first.split("|||").last, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w300),)
-                            ],
-                        ),
-                        onTap: () {
-                          selectedName = places[index].keys.first.split("|||").first;
-                          selectedPos = places[index].values.first;
-                          Navigator.pop(context);
-                        },
-                      )
-                    );
-                  },
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: places.length,
+                    itemBuilder: (context, index) {
+                      return Container(
+                        height: 100,
+                        child: GestureDetector(
+                          child: Column(
+                              children: [
+                                Text(places[index].keys.first.split("|||").first, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                                Text(places[index].keys.first.split("|||").last, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w300),)
+                              ],
+                          ),
+                          onTap: () {
+                            selectedName = places[index].keys.first.split("|||").first;
+                            selectedPos = places[index].values.first;
+                            Navigator.pop(context);
+                          },
+                        )
+                      );
+                    },
+                  ),
                 )
               ],
             ),
@@ -487,7 +506,7 @@ class TmapService {
       final features = data["features"];
 
       List<String> descriptions = [];
-      List<List<LatLng>> linePoints = [];
+      List<LatLng> linePoints = [];
 
       double totalKm = double.parse(features[0]["properties"]["totalDistance"]) / 1000;
       double totalHour = double.parse(features[0]["properties"]["totalTime"]) / 60;
@@ -501,12 +520,9 @@ class TmapService {
         }
         else if (feature["geometry"]["type"] == "LineString") {
           final coordinates = feature["geometry"]["coordinates"];
-          linePoints.add(
-            [
-              LatLng(double.parse(coordinates[0][1]), double.parse(coordinates[0][0])),
-              LatLng(double.parse(coordinates[1][1]), double.parse(coordinates[1][0]))
-            ]
-          );
+          for (final coordinate in coordinates) {
+            linePoints.add(LatLng(double.parse(coordinate[1]), double.parse(coordinate[0])));
+          }
         }
       }
 
