@@ -278,7 +278,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                 // 버튼 클릭 시 동작
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Color.fromRGBO(119, 234, 117, 1),
+                                backgroundColor: Color.fromRGBO(79, 235, 76, 1),
                                 shadowColor: Colors.white,
                                 elevation: 5,
                                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
