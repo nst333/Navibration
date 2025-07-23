@@ -162,7 +162,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Image.asset(
-                    'assets/images/icon_0.png',
+                    'assets/images/fffffinal_icon.png',
                     width: 200,
                     height: 200,
                     fit: BoxFit.cover,
