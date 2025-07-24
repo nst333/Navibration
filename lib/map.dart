@@ -1,19 +1,27 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 class MapPage extends StatefulWidget {
   final List<LatLng> routePoints;
-  const MapPage({Key? key, this.routePoints = const []}) : super(key: key);
+  final LatLng startPoint;
+  final LatLng endPoint;
+  const MapPage(
+      {
+        Key? key,
+        required this.routePoints,
+        required this.startPoint,
+        required this.endPoint
+      }
+      ) : super(key: key
+  );
 
   @override
   _MapPageState createState() => _MapPageState();
 }
 
 class _MapPageState extends State<MapPage> {
-  final _center = LatLng(37.572950, 126.979357);
-  final _zoom = 13.0;
-
   // 사용할 스타일들 정의
   final Map<String, String> _styles = {
     'OSM Standard': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -29,10 +37,17 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: FlutterMap(
-        options: MapOptions(initialCenter: _center, initialZoom: _zoom),
+        options: MapOptions(
+          initialCameraFit: CameraFit.bounds(
+            bounds: LatLngBounds(widget.startPoint, widget.endPoint),
+            padding: EdgeInsets.all(50)
+          )
+        ),
+
         children: [
           TileLayer(
             urlTemplate: _styles[_currentStyleName]!,
+            userAgentPackageName: 'io.github.nst33',
           ),
           if (widget.routePoints.isNotEmpty)
             PolylineLayer(

@@ -20,5 +20,4 @@ tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
 dependencies {
-    implementation(files("app\\libs\\com.skt.Tmap_1.77.jar"))
 }
