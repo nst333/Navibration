@@ -14,7 +14,8 @@ void main() {
             fontFamily: 'NotoSansKR'
         ),
         home: MyApp(),
-      )
+        debugShowCheckedModeBanner: false,
+      ),
   );
 }
 //void main() => runApp(MapPage());
@@ -49,6 +50,9 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     "최단 거리 + 계단 제외" : "30"
   };
   String _pathMode = "기본";
+
+  final List<int> _pathCountList = List.generate(11, (index) => index + 5);
+  int _pathCount = 10;
 
   @override
   void initState() {
@@ -97,7 +101,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Future<void> _onSearchSubmitted(String keyword) async {
     String value = _controller.text;
     if (value.isNotEmpty) {
-      final places = await TmapService.foundLatLngByName(value);
+      final places = await TmapService.foundLatLngByName(value, _pathCount);
       if (places.isEmpty) return;
 
       TmapService.showDestinationDialog(
@@ -225,9 +229,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Image.asset(
-                    'assets/images/icon_0.png',
+                    'assets/images/fffffinal_icon.png',
                     width: (screenWidth * 40/100),
                     height: (screenHeight * 20/100),
+                    cacheWidth: (screenWidth * 0.4).toInt(),
+                    cacheHeight: (screenHeight * 0.2).toInt(),
                     fit: BoxFit.cover,
                   ),
                 ),
@@ -308,47 +314,15 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                     ),
                   ),
 
-                  // 즐겨 찾기
-                  AnimatedOpacity(
-                    opacity: _submitted ? 0 : 1,
-                    duration: _animDuration,
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(60),
-                          ),
-                          padding: EdgeInsets.zero,
-                          splashFactory: NoSplash.splashFactory
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 60),
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Color.fromRGBO(222, 222, 222, 1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.star_border),
-                                SizedBox(width: 8),
-                                Text(
-                                  '즐겨찾기',
-                                  style: TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.w500),
-                                )
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                  SizedBox(height: 30,),
+
+                  Text(
+                    "가끔 경로를 찾지 못하고 현재 화면에서 멈출 수 있습니다!",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12
                     ),
-                  ),
+                  )
                 ],
               ),
             ),
@@ -466,9 +440,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                               color: textColor
                           ),
                         ),
-
                         SizedBox(height: 10,),
-
                         Padding(
                             padding: EdgeInsets.only(left: 30),
                             child: DropdownButton(
@@ -488,6 +460,8 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                             )
                         ),
 
+
+
                         // 나중에 설정값 추가할 때, 구분선 넣고 추가하기
                         SizedBox(height: 20,),
 
@@ -497,6 +471,78 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                           height: 20,
                           indent: 30,
                           endIndent: 30,
+                        ),
+
+                        SizedBox(height: 20,),
+
+
+
+                        Text(
+                          "목적지 검색 개수",
+                          style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: textColor
+                          ),
+                        ),
+                        Text(
+                          '$_pathCount',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black
+                          ),
+                        ),
+                        SizedBox(height: 10,),
+                        CupertinoButton(
+                          color: CupertinoColors.activeBlue,
+                          child: Text('개수 선택'),
+                          onPressed: () {
+
+                            showCupertinoModalPopup(
+                              context: context,
+                              builder: (_) => Container(
+                                height: 300,
+                                color: Colors.white,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      alignment: Alignment.centerRight,
+                                      child: CupertinoButton(
+                                        child: Text(
+                                            "완료",
+                                          style: TextStyle(
+                                            color: Colors.black
+                                          ),
+                                        ),
+                                        onPressed: () => Navigator.pop(context),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: CupertinoPicker(
+                                        itemExtent: 40,
+
+                                        scrollController: FixedExtentScrollController(
+                                          initialItem: _pathCount - 5
+                                        ),
+
+                                        onSelectedItemChanged: (index) {
+                                          setState(() {
+                                            _pathCount = _pathCountList[index];
+                                          });
+                                        },
+
+                                        children: _pathCountList
+                                          .map((e) => Center(child: Text('$e'),))
+                                          .toList()
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            );
+
+                          },
                         )
                       ],
                     ),
@@ -505,26 +551,33 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
               ),
             ),
 
-            SafeArea(
-              child: Container(
-                height: 100,
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    IconButton(
-                      icon: AnimatedIcon(
-                        icon: AnimatedIcons.menu_close,
-                        progress: _animController,
-                        color: Colors.black,
-                        size: 28,
-                      ),
-                      onPressed: toggleMenu,
+            Visibility(
+              visible: !_submitted,
+              child: AnimatedOpacity(
+                opacity: _submitted ? 0 : 1,
+                duration: _animDuration,
+                child: SafeArea(
+                  child: Container(
+                    height: 100,
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        IconButton(
+                          icon: AnimatedIcon(
+                            icon: AnimatedIcons.menu_close,
+                            progress: _animController,
+                            color: Colors.black,
+                            size: 28,
+                          ),
+                          onPressed: toggleMenu,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            )
           ],
         )
     );
@@ -616,7 +669,7 @@ class TmapService {
   }
 
   /// 키워드로 POI를 검색해 [이름, 주소, 위도, 경도] 맵의 리스트를 반환
-  static Future<List<Map<String, LatLng>>> foundLatLngByName(String keyword) async {
+  static Future<List<Map<String, LatLng>>> foundLatLngByName(String keyword, int count) async {
     if (keyword.isEmpty) return [];
 
     final uri = Uri.https(
@@ -627,7 +680,7 @@ class TmapService {
         'format': 'json',
         'searchKeyword': keyword,
         'resCoordType': 'WGS84GEO',
-        'count': '10',
+        'count': count.toString(),
       },
     );
 
@@ -712,6 +765,11 @@ class TmapService {
     List<String> descriptions = [];
     List<LatLng> linePoints = [];
 
+    final firstFeatures = features.firstWhere(
+      (f) => (f["properties"]?["totalDistance"] != null) && (f["properties"]?["totalTime"] != null),
+      orElse: () => null
+    );
+    if (firstFeatures == null) return null;
 
     double totalKm = features[0]["properties"]["totalDistance"] / 1000;
     double totalHour = features[0]["properties"]["totalTime"] / 60;

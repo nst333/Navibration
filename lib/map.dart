@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -23,7 +22,7 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   // 사용할 스타일들 정의
-  final Map<String, String> _styles = {
+  Map<String, String> _styles = {
     'OSM Standard': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     'OpenTopoMap': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     'Stamen Toner': 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}@2x.png',
