@@ -101,8 +101,16 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Future<void> _onSearchSubmitted(String keyword) async {
     String value = _controller.text;
     if (value.isNotEmpty) {
-      final places = await TmapService.foundLatLngByName(value, _pathCount);
-      if (places.isEmpty) return;
+      final places = await TmapService.findLatLngByName(value, _pathCount);
+      if (places.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('장소를 찾을 수 없습니다.'),
+          )
+        );
+        _controller.clear();
+        return;
+      }
 
       TmapService.showDestinationDialog(
           context,
@@ -176,7 +184,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       pathMode: _pathModes[_pathMode]!
     );
 
-    if (routeData != null) {
+    if (routeData != []) {
       pathData = routeData;
 
       setState(() {
@@ -184,6 +192,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         _showMap = true;
       });
       _focusNode.unfocus();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("경로를 계산할 수 없습니다.\n인터넷이 연결되었는지 확인해주세요."),
+        )
+      );
     }
   }
 
@@ -669,7 +683,7 @@ class TmapService {
   }
 
   /// 키워드로 POI를 검색해 [이름, 주소, 위도, 경도] 맵의 리스트를 반환
-  static Future<List<Map<String, LatLng>>> foundLatLngByName(String keyword, int count) async {
+  static Future<List<Map<String, LatLng>>> findLatLngByName(String keyword, int count) async {
     if (keyword.isEmpty) return [];
 
     final uri = Uri.https(
