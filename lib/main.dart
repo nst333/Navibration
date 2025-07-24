@@ -1,11 +1,12 @@
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 
 void main() {
   runApp(
@@ -39,7 +40,9 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   bool _submitted = false;
   bool _focused = false;
   bool _showMap = false;
-  Map<String, dynamic>? pathData;
+  Map<String, dynamic>? _pathData;
+
+  Map<LatLng, double> angleData = {};
 
   static const _animDuration = Duration(milliseconds: 500);
 
@@ -101,7 +104,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Future<void> _onSearchSubmitted(String keyword) async {
     String value = _controller.text;
     if (value.isNotEmpty) {
-      final places = await TmapService.findLatLngByName(value, _pathCount);
+      final places = await APIService.findLatLngByName(value, _pathCount);
       if (places.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -112,7 +115,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         return;
       }
 
-      TmapService.showDestinationDialog(
+      APIService.showDestinationDialog(
           context,
           places,
           (name, pos) => _handleSelectedDestination(name, pos)
@@ -174,18 +177,19 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     );
 
 
-    final routeData = await TmapService.fetchPedestrianRoute(
+    final routeData = await APIService.fetchPedestrianRoute(
       startLat: position.latitude,
       startLng: position.longitude,
 
-      endLat: TmapService.selectedPos.latitude,
-      endLng: TmapService.selectedPos.longitude,
+      endLat: APIService.selectedPos.latitude,
+      endLng: APIService.selectedPos.longitude,
 
       pathMode: _pathModes[_pathMode]!
     );
 
     if (routeData != []) {
-      pathData = routeData;
+      _pathData = routeData;
+      calculateAngleData();
 
       setState(() {
         _submitted = true;
@@ -201,12 +205,41 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
   }
 
-  void onPressStar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('즐겨찾기 기능은 아직 준비 중입니다.'),
-      ),
-    );
+  void calculateAngleData() {
+    // Bearing Formula
+    // θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
+
+    List<LatLng> points = _pathData!["linePoints"];
+
+    for (int i = 1; i < points.length; i++) {
+      LatLng from = points[i-1];
+      LatLng to   = points[i];
+
+      double phi1 = degToRadian(from.latitude);
+      double phi2 = degToRadian(to.latitude);
+      double lambda1 = degToRadian(from.longitude);
+      double lambda2 = degToRadian(to.longitude);
+
+      double angle = radianToDeg(
+        atan2(
+            sin(lambda2 - lambda1) * cos(phi2),
+
+            cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(lambda2 - lambda1)
+        )
+      );
+
+      angleData[from] = angle;
+    }
+  }
+
+  String getAngleString() {
+    String result = '';
+
+    for (LatLng point in angleData.keys) {
+      result += '${point.toString()}  ----->  ${angleData[point].toString()}\n';
+    }
+
+    return result;
   }
 
   @override
@@ -223,14 +256,14 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         body: Stack(
           children: [
             // MapPage
-            if (_showMap && pathData != null && pathData!["linePoints"] != null)
+            if (_showMap && _pathData != null && _pathData!["linePoints"] != null)
               AnimatedOpacity(
                 duration: Duration(milliseconds: _animDuration.inMilliseconds + 200),
                 opacity: _showMap ? 1 : 0,
                 child: MapPage(
-                  routePoints: pathData?["linePoints"] ?? [],
-                  startPoint: pathData?['startPoint'] ?? LatLng(0, 0),
-                  endPoint: pathData?['endPoint'] ?? LatLng(0, 0),
+                  routePoints: _pathData?["linePoints"] ?? [],
+                  startPoint: _pathData?['startPoint'] ?? LatLng(0, 0),
+                  endPoint: _pathData?['endPoint'] ?? LatLng(0, 0),
                 ),
               ),
 
@@ -381,9 +414,13 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                             children: [
                               ElevatedButton(
                                 onPressed: () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: getAngleString())
+                                  );
+
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('안내 시작 기능은 아직 준비 중입니다.'),
+                                      content: Text('각 데이터가 복사됨.'),
                                     ),
                                   );
                                 },
@@ -598,7 +635,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 }
 
-class TmapService {
+class APIService {
   static const _appKey = 'oTTP497zZS5eps0zfeuTJ16mujxhkO2Y6DSF3k05';
   static String selectedName = "";
   static LatLng selectedPos = LatLng(0, 0);
