@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -57,6 +61,15 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   final List<int> _pathCountList = List.generate(11, (index) => index + 5);
   int _pathCount = 10;
 
+  final FlutterTts _tts = FlutterTts();
+
+  double? _lastHeading;
+  bool _isStable = false;
+  Timer? _stabilityTimer;
+  Timer? _confirmationTimer;
+  double _stabilityThreshold = 3;
+  DateTime? _lastChangedTime;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +101,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       parent: _animController,
       curve: Curves.easeInOut
     ));
+
+    _tts.setLanguage("ko-KR");
+    _tts.setVoice({"name": "ko-kr-x-ism-local", "locale": "ko-KR"});
+    _tts.setVolume(1);
+    _tts.setSpeechRate(1);
   }
 
   void toggleMenu() {
@@ -126,6 +144,66 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         _showMap = false;
       });
     }
+  }
+
+  void _startListeningToCompass() {
+    FlutterCompass.events?.listen((event) {
+      double? currentHeading = event.heading;
+
+      if (currentHeading == null) return;
+
+      if (_lastHeading != null) {
+        double delta = _angleDifference(currentHeading, _lastHeading!);
+
+        if (delta < _stabilityThreshold) {
+          _onStableHeading(currentHeading);
+        } else {
+          _cancelStabilityProcess();
+        }
+
+        _lastHeading = currentHeading;
+      }
+    });
+  }
+
+  double _angleDifference(double a, double b) {
+    double diff = (a - b).abs();
+    return diff > 180 ? 360 - diff : diff;
+  }
+
+  void _onStableHeading(double heading) {
+    if (_isStable) return;
+
+    _stabilityTimer ??= Timer(Duration(seconds: 2), () {
+      _isStable = true;
+      _speakAndConfirm(heading);
+    });
+  }
+
+  void _cancelStabilityProcess() {
+    _stabilityTimer?.cancel();
+    _stabilityTimer = null;
+    _confirmationTimer?.cancel();
+    _confirmationTimer = null;
+    _isStable = false;
+  }
+
+  void _speakAndConfirm(double heading) async {
+    await _tts.speak(
+        "원하는 위치에 두었나요? 3초간 응답이 없으면 설정이 완료된 것으로 간주해 길 안내가 시작됩니다.");
+
+    _confirmationTimer = Timer(Duration(seconds: 3), () {
+      _setStartDirection(heading);
+    });
+  }
+
+  void _setStartDirection(double heading) {
+    debugPrint("🧭 설정 완료! 시작 방향은 $heading 도");
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("🧭 설정 완료! 시작 방향은 $heading 도"),
+      )
+    );
   }
 
   @override
@@ -268,20 +346,20 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
               ),
 
             // 로고
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 100),
+            Positioned(
+              top: 100, // 적당히 조절해
+              left: (screenWidth - screenWidth * 0.6) / 2,
               child: AnimatedOpacity(
                 opacity: _submitted || _focused ? 0 : 1,
                 duration: _animDuration,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Image.asset(
-                    'assets/images/fffffinal_icon.png',
-                    width: (screenWidth * 40/100),
-                    height: (screenHeight * 20/100),
-                    cacheWidth: (screenWidth * 0.4).toInt(),
-                    cacheHeight: (screenHeight * 0.2).toInt(),
-                    fit: BoxFit.cover,
+                child: SizedBox(
+                  width: screenWidth * 0.6,
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: Image.asset(
+                      'assets/images/fffffinal_icon.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),
@@ -412,10 +490,33 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                             mainAxisSize: MainAxisSize.max,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              ElevatedButton(
+                              CupertinoButton(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      width: 2,
+                                      color: borderColor,
+                                    ),
+                                  ),
+                                  alignment: Alignment.center, // 텍스트 위치 맞추기
+                                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  child: Text(
+                                    '시작',
+                                    style: TextStyle(
+                                      color: borderColor,
+                                    ),
+                                  ),
+                                ),
                                 onPressed: () {
+                                  _tts.speak("기기를 원하는 위치에 두고 방향이 크게 틀어지지 않게 주의하세요.");
+                                  _startListeningToCompass();
+                                  _tts.speak("길 안내를 시작합니다!");
+
+                                  // TODO : 안내 신호 보내기
+
                                   Clipboard.setData(
-                                    ClipboardData(text: getAngleString())
+                                      ClipboardData(text: getAngleString())
                                   );
 
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -424,23 +525,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                     ),
                                   );
                                 },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color.fromRGBO(79, 235, 76, 1),
-                                  shadowColor: Colors.white,
-                                  elevation: 5,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(60),
-                                  ),
-                                ),
-                                child: const Text(
-                                  '시작',
-                                  style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                               )
                             ],
                           )
@@ -545,10 +629,24 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                         ),
                         SizedBox(height: 10,),
                         CupertinoButton(
-                          color: CupertinoColors.activeBlue,
-                          child: Text('개수 선택'),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                width: 2,
+                                color: borderColor,
+                              ),
+                            ),
+                            alignment: Alignment.center, // 텍스트 위치 맞추기
+                            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                            child: Text(
+                              '개수 선택',
+                              style: TextStyle(
+                                color: textColor,
+                              ),
+                            ),
+                          ),
                           onPressed: () {
-
                             showCupertinoModalPopup(
                               context: context,
                               builder: (_) => Container(
@@ -560,11 +658,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                       padding: const EdgeInsets.symmetric(horizontal: 16),
                                       alignment: Alignment.centerRight,
                                       child: CupertinoButton(
+                                        padding: EdgeInsets.zero,
                                         child: Text(
-                                            "완료",
-                                          style: TextStyle(
-                                            color: Colors.black
-                                          ),
+                                          "완료",
+                                          style: TextStyle(color: Colors.black),
                                         ),
                                         onPressed: () => Navigator.pop(context),
                                       ),
@@ -572,27 +669,23 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                     Expanded(
                                       child: CupertinoPicker(
                                         itemExtent: 40,
-
                                         scrollController: FixedExtentScrollController(
-                                          initialItem: _pathCount - 5
+                                          initialItem: _pathCount - 5,
                                         ),
-
                                         onSelectedItemChanged: (index) {
                                           setState(() {
                                             _pathCount = _pathCountList[index];
                                           });
                                         },
-
                                         children: _pathCountList
-                                          .map((e) => Center(child: Text('$e'),))
-                                          .toList()
+                                            .map((e) => Center(child: Text('$e')))
+                                            .toList(),
                                       ),
                                     ),
                                   ],
                                 ),
-                              )
+                              ),
                             );
-
                           },
                         )
                       ],
