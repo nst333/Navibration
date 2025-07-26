@@ -40,9 +40,9 @@ dependencies:
   latlong2: ^0.9.1
   geolocator: ^14.0.2
   geocoding: ^4.0.0
-  flutter_tts: ^4.2.3
   flutter_compass: ^0.8.1
   vibration: ^3.1.3
+  audioplayers: ^6.5.0
 
 dev_dependencies:
   flutter_test:
@@ -84,6 +84,9 @@ flutter:
    - assets/images/icon_2_3_3.png
    - assets/images/icon_2_3_4.png
    - assets/map.html
+   - assets/audio/no_movement_notice.mp3
+   - assets/audio/position_check.mp3
+   - assets/audio/start_navi.mp3
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

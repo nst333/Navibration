@@ -1,14 +1,16 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navibration/compass_test.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -19,6 +21,7 @@ void main() {
             fontFamily: 'NotoSansKR'
         ),
         home: MyApp(),
+        //home: CompassTestPage(),
         debugShowCheckedModeBanner: false,
       ),
   );
@@ -46,7 +49,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   bool _showMap = false;
   Map<String, dynamic>? _pathData;
 
-  Map<LatLng, double> angleData = {};
+  Map<String, double> angleData = {};
 
   static const _animDuration = Duration(milliseconds: 500);
 
@@ -61,13 +64,15 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   final List<int> _pathCountList = List.generate(11, (index) => index + 5);
   int _pathCount = 10;
 
-  final FlutterTts _tts = FlutterTts();
-
   double? _lastHeading;
   bool _isStable = false;
   Timer? _stabilityTimer;
   Timer? _confirmationTimer;
   double _stabilityThreshold = 3;
+
+  final AudioPlayer _player = AudioPlayer();
+
+  StreamSubscription<CompassEvent>? _compassSub;
 
   @override
   void initState() {
@@ -75,17 +80,24 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
     _controller.addListener(() {
       if (_controller.text.isEmpty && _submitted) {
-        setState(() {
-          _submitted = false;
-          _showMap = false;
-        });
+        if (mounted) {
+          setState(() {
+            _submitted = false;
+            _showMap = false;
+          });
+        }
       }
     });
 
     _focusNode.addListener(() {
-      setState(() {
-        _focused = _focusNode.hasFocus;
-      });
+      if (mounted) {
+        final hasFocus = _focusNode.hasFocus;
+        if (_focused != hasFocus) {
+          setState(() {
+            _focused = hasFocus;
+          });
+        }
+      }
     });
 
     _animController = AnimationController(
@@ -100,11 +112,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       parent: _animController,
       curve: Curves.easeInOut
     ));
-
-    //_tts.setLanguage("ko-KR");
-    //_tts.setVoice({"name": "ko-kr-x-ism-local", "locale": "ko-KR"});
-    //_tts.setVolume(1);
-    //_tts.setSpeechRate(1);
   }
 
   void toggleMenu() {
@@ -147,22 +154,23 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   void _startListeningToCompass() {
     print("_startListeningToCompass run");
-    FlutterCompass.events?.listen((event) {
-      double? currentHeading = event.heading;
 
+    _compassSub?.cancel();
+
+    _compassSub = FlutterCompass.events?.listen((event) {
+      double? currentHeading = event.heading;
       if (currentHeading == null) return;
 
       if (_lastHeading != null) {
         double delta = _angleDifference(currentHeading, _lastHeading!);
-
         if (delta < _stabilityThreshold) {
           _onStableHeading(currentHeading);
         } else {
           _cancelStabilityProcess();
         }
-
-        _lastHeading = currentHeading;
       }
+
+      _lastHeading = currentHeading;
     });
   }
 
@@ -186,11 +194,13 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     _confirmationTimer?.cancel();
     _confirmationTimer = null;
     _isStable = false;
+
+    _compassSub?.cancel();
+    _compassSub = null;
   }
 
   void _speakAndConfirm(double heading) async {
-    await _tts.speak(
-        "원하는 위치에 두었나요? 3초간 응답이 없으면 설정이 완료된 것으로 간주해 길 안내가 시작됩니다.");
+    await playAudio("position_check");
 
     _confirmationTimer = Timer(Duration(seconds: 3), () {
       _setStartDirection(heading);
@@ -206,11 +216,26 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     );
   }
 
+  Future<void> playAudio(String filename, {VoidCallback? onComplete}) async {
+    try {
+      await _player.stop();
+      await _player.play(AssetSource('audio/$filename'));
+
+      Duration? duration = await _player.getDuration();
+      await Future.delayed(duration ?? Duration(seconds: 3));
+
+      if (onComplete != null) onComplete();
+    } catch (e) {
+      debugPrint("🔊 오디오 재생 오류: $e");
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
     _animController.dispose();
+    _compassSub?.cancel();
     super.dispose();
   }
 
@@ -265,7 +290,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       pathMode: _pathModes[_pathMode]!
     );
 
-    if (routeData != []) {
+    if (routeData != [] && routeData?["linePoints"] != null && routeData?["linePoints"] is List<LatLng>) {
       _pathData = routeData;
       calculateAngleData();
 
@@ -287,6 +312,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     // Bearing Formula
     // θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
 
+    /// LatLng 객체를 고정 소수점 문자열 키로 변환
+    String latLngKey(LatLng pos) =>
+        "${pos.latitude.toStringAsFixed(6)},${pos.longitude.toStringAsFixed(6)}";
+
     List<LatLng> points = _pathData!["linePoints"];
 
     for (int i = 1; i < points.length; i++) {
@@ -306,18 +335,23 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         )
       );
 
-      angleData[from] = angle;
+      angleData[latLngKey(from)] = angle;
     }
   }
 
   String getAngleString() {
     String result = '';
 
-    for (LatLng point in angleData.keys) {
-      result += '${point.toString()}  ----->  ${angleData[point].toString()}\n';
+    for (var entry in angleData.entries) {
+      result += '${entry.key}  ----->  ${entry.value.toStringAsFixed(2)}\n';
     }
 
     return result;
+  }
+
+  double calculateRelativeHeading(double absoluteHeading, double userNorthHeading) {
+    double relative = (absoluteHeading - userNorthHeading + 360) % 360;
+    return relative;
   }
 
   @override
@@ -334,7 +368,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         body: Stack(
           children: [
             // MapPage
-            if (_showMap && _pathData != null && _pathData!["linePoints"] != null)
+            if (_showMap && _pathData?["linePoints"] != null && _pathData?["linePoints"] is List<LatLng>)
               AnimatedOpacity(
                 duration: Duration(milliseconds: _animDuration.inMilliseconds + 200),
                 opacity: _showMap ? 1 : 0,
@@ -508,12 +542,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                     ),
                                   ),
                                 ),
-                                onPressed: () {
-                                  _tts.speak("기기를 원하는 위치에 두고 방향이 크게 틀어지지 않게 주의하세요.");
-                                  _tts.stop();
-                                  _startListeningToCompass();
-                                  _tts.speak("길 안내를 시작합니다!");
-                                  _tts.stop();
+                                onPressed: () async {
+                                  print("no_movement_notice");
+                                  await playAudio("no_movement_notice.mp3", onComplete: () {
+                                    _startListeningToCompass();
+                                    playAudio("start_navi.mp3");
+                                  });
 
                                   // TODO : 안내 신호 보내기
 
@@ -579,22 +613,24 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                         ),
                         SizedBox(height: 10,),
                         Padding(
-                            padding: EdgeInsets.only(left: 30),
-                            child: DropdownButton(
-                              value: _pathMode,
-                              hint: const Text("경로 설정"),
-                              items: _pathModes.keys.map((item) {
-                                return DropdownMenuItem(
-                                  value: item,
-                                  child: Text(item),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
+                          padding: EdgeInsets.only(left: 30),
+                          child: DropdownButton(
+                            value: _pathMode,
+                            hint: const Text("경로 설정"),
+                            items: _pathModes.keys.map((item) {
+                              return DropdownMenuItem(
+                                value: item,
+                                child: Text(item),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (_pathMode != value) {
                                 setState(() {
                                   _pathMode = value!;
                                 });
-                              },
-                            )
+                              }
+                            },
+                          )
                         ),
 
 
@@ -675,9 +711,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                           initialItem: _pathCount - 5,
                                         ),
                                         onSelectedItemChanged: (index) {
-                                          setState(() {
-                                            _pathCount = _pathCountList[index];
-                                          });
+                                          final newValue = _pathCountList[index];
+                                          if (_pathCount != newValue) {
+                                            setState(() {
+                                              _pathCount = newValue;
+                                            });
+                                          }
                                         },
                                         children: _pathCountList
                                             .map((e) => Center(child: Text('$e')))
@@ -917,8 +956,16 @@ class APIService {
     );
     if (firstFeatures == null) return null;
 
-    double totalKm = features[0]["properties"]["totalDistance"] / 1000;
-    double totalHour = features[0]["properties"]["totalTime"] / 60;
+    double totalKm;
+    double totalHour;
+
+    try {
+      totalKm = features[0]["properties"]["totalDistance"] / 1000;
+      totalHour = features[0]["properties"]["totalTime"] / 60;
+    } catch (Exception) {
+      totalKm = -1;
+      totalHour = -1;
+    }
 
     for (final feature in features) {
       // Point면 PolyLine 용 꼭짓점 모으기
