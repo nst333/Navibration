@@ -68,7 +68,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Timer? _stabilityTimer;
   Timer? _confirmationTimer;
   double _stabilityThreshold = 3;
-  DateTime? _lastChangedTime;
 
   @override
   void initState() {
@@ -102,10 +101,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       curve: Curves.easeInOut
     ));
 
-    _tts.setLanguage("ko-KR");
-    _tts.setVoice({"name": "ko-kr-x-ism-local", "locale": "ko-KR"});
-    _tts.setVolume(1);
-    _tts.setSpeechRate(1);
+    //_tts.setLanguage("ko-KR");
+    //_tts.setVoice({"name": "ko-kr-x-ism-local", "locale": "ko-KR"});
+    //_tts.setVolume(1);
+    //_tts.setSpeechRate(1);
   }
 
   void toggleMenu() {
@@ -147,6 +146,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 
   void _startListeningToCompass() {
+    print("_startListeningToCompass run");
     FlutterCompass.events?.listen((event) {
       double? currentHeading = event.heading;
 
@@ -510,8 +510,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                 ),
                                 onPressed: () {
                                   _tts.speak("기기를 원하는 위치에 두고 방향이 크게 틀어지지 않게 주의하세요.");
+                                  _tts.stop();
                                   _startListeningToCompass();
                                   _tts.speak("길 안내를 시작합니다!");
+                                  _tts.stop();
 
                                   // TODO : 안내 신호 보내기
 
