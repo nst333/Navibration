@@ -357,7 +357,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                   child: AspectRatio(
                     aspectRatio: 1,
                     child: Image.asset(
-                      'assets/images/fffffinal_icon.png',
+                      'assets/images/fffffffffffff.png',
                       fit: BoxFit.contain,
                     ),
                   ),
