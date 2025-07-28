@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
@@ -22,7 +21,7 @@ void main() {
         ),
         home: MyApp(),
         //home: CompassTestPage(),
-        debugShowCheckedModeBanner: false,
+        debugShowCheckedModeBanner: true,
       ),
   );
 }
@@ -47,9 +46,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   bool _submitted = false;
   bool _focused = false;
   bool _showMap = false;
+  bool _isEnterSplash = true;
   Map<String, dynamic>? _pathData;
 
-  Map<String, double> angleData = {};
+  Map<LatLng, double> _angleData = {};
 
   static const _animDuration = Duration(milliseconds: 500);
 
@@ -65,18 +65,30 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   int _pathCount = 10;
 
   double? _lastHeading;
-  bool _isStable = false;
-  Timer? _stabilityTimer;
   Timer? _confirmationTimer;
   double _stabilityThreshold = 3;
+  double? _finalHeading;
 
   final AudioPlayer _player = AudioPlayer();
 
   StreamSubscription<CompassEvent>? _compassSub;
 
+  double _angleThreshold = 10;
+
+  static const double earthRadius = 6371;
+
+
   @override
   void initState() {
     super.initState();
+
+    Future.delayed(Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _isEnterSplash = false;
+        });
+      }
+    });
 
     _controller.addListener(() {
       if (_controller.text.isEmpty && _submitted) {
@@ -152,84 +164,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
   }
 
-  void _startListeningToCompass() {
-    print("_startListeningToCompass run");
-
-    _compassSub?.cancel();
-
-    _compassSub = FlutterCompass.events?.listen((event) {
-      double? currentHeading = event.heading;
-      if (currentHeading == null) return;
-
-      if (_lastHeading != null) {
-        double delta = _angleDifference(currentHeading, _lastHeading!);
-        if (delta < _stabilityThreshold) {
-          _onStableHeading(currentHeading);
-        } else {
-          _cancelStabilityProcess();
-        }
-      }
-
-      _lastHeading = currentHeading;
-    });
-  }
-
-  double _angleDifference(double a, double b) {
-    double diff = (a - b).abs();
-    return diff > 180 ? 360 - diff : diff;
-  }
-
-  void _onStableHeading(double heading) {
-    if (_isStable) return;
-
-    _stabilityTimer ??= Timer(Duration(seconds: 2), () {
-      _isStable = true;
-      _speakAndConfirm(heading);
-    });
-  }
-
-  void _cancelStabilityProcess() {
-    _stabilityTimer?.cancel();
-    _stabilityTimer = null;
-    _confirmationTimer?.cancel();
-    _confirmationTimer = null;
-    _isStable = false;
-
-    _compassSub?.cancel();
-    _compassSub = null;
-  }
-
-  void _speakAndConfirm(double heading) async {
-    await playAudio("position_check");
-
-    _confirmationTimer = Timer(Duration(seconds: 3), () {
-      _setStartDirection(heading);
-    });
-  }
-
-  void _setStartDirection(double heading) {
-    debugPrint("🧭 설정 완료! 시작 방향은 $heading 도");
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("🧭 설정 완료! 시작 방향은 $heading 도"),
-      )
-    );
-  }
-
-  Future<void> playAudio(String filename, {VoidCallback? onComplete}) async {
-    try {
-      await _player.stop();
-      await _player.play(AssetSource('audio/$filename'));
-
-      Duration? duration = await _player.getDuration();
-      await Future.delayed(duration ?? Duration(seconds: 3));
-
-      if (onComplete != null) onComplete();
-    } catch (e) {
-      debugPrint("🔊 오디오 재생 오류: $e");
-    }
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -276,7 +210,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
 
     Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high
+        desiredAccuracy: LocationAccuracy.bestForNavigation
     );
 
 
@@ -292,7 +226,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
     if (routeData != [] && routeData?["linePoints"] != null && routeData?["linePoints"] is List<LatLng>) {
       _pathData = routeData;
-      calculateAngleData();
 
       setState(() {
         _submitted = true;
@@ -309,49 +242,208 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 
   void calculateAngleData() {
-    // Bearing Formula
-    // θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
-
-    /// LatLng 객체를 고정 소수점 문자열 키로 변환
-    String latLngKey(LatLng pos) =>
-        "${pos.latitude.toStringAsFixed(6)},${pos.longitude.toStringAsFixed(6)}";
-
     List<LatLng> points = _pathData!["linePoints"];
 
     for (int i = 1; i < points.length; i++) {
-      LatLng from = points[i-1];
-      LatLng to   = points[i];
+      _angleData[points[i-1]] = calculateBearing(points[i-1], points[i]);
+    }
+  }
 
-      double phi1 = degToRadian(from.latitude);
-      double phi2 = degToRadian(to.latitude);
-      double lambda1 = degToRadian(from.longitude);
-      double lambda2 = degToRadian(to.longitude);
+  void _startListeningToCompass() {
+    print("_startListeningToCompass run");
 
-      double angle = radianToDeg(
+    _compassSub?.cancel();
+    _compassSub = FlutterCompass.events?.listen((event) async {
+      final currentHeading = event.heading;
+      if (currentHeading == null) return;
+
+      if (_lastHeading != null) {
+        double delta = _angleDifference(currentHeading, _lastHeading!);
+
+        if (delta < _stabilityThreshold) {
+          _speakAndConfirm(currentHeading);
+        }
+      }
+
+      _lastHeading = currentHeading;
+
+      setState(() {});
+    });
+  }
+
+  double _angleDifference(double a, double b) {
+    double diff = (a - b).abs();
+    return diff > 180 ? 360 - diff : diff;
+  }
+
+  double _toRelativeAngle(double angle) {
+    return (angle - _finalHeading! + 360) % 360;
+  }
+
+  void _speakAndConfirm(double heading) async {
+    if (_confirmationTimer != null) return;
+
+    await playAudio("position_check");
+
+    _confirmationTimer = Timer(Duration(seconds: 3), () {
+      _setStartDirection(heading);
+    });
+  }
+
+  void _setStartDirection(double heading) {
+    debugPrint("🧭 설정 완료! 시작 방향은 $heading 도");
+    _finalHeading = heading;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("🧭 설정 완료! 시작 방향은 $heading 도"),
+        )
+    );
+  }
+
+  Future<void> playAudio(String filename, {VoidCallback? onComplete}) async {
+    try {
+      await _player.stop();
+      await _player.play(AssetSource('audio/$filename'));
+
+      Duration? duration = await _player.getDuration();
+      await Future.delayed(duration ?? Duration(seconds: 3));
+
+      if (onComplete != null) onComplete();
+    } catch (e) {
+      debugPrint("🔊 오디오 재생 오류: $e");
+    }
+  }
+
+  double calculateBearing(LatLng a, LatLng b) {
+    // Bearing Formula
+    // θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
+
+    double phi1 = degToRadian(a.latitude);
+    double phi2 = degToRadian(b.latitude);
+    double lambda1 = degToRadian(a.longitude);
+    double lambda2 = degToRadian(b.longitude);
+
+    return _toRelativeAngle(radianToDeg(
         atan2(
             sin(lambda2 - lambda1) * cos(phi2),
 
             cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(lambda2 - lambda1)
         )
-      );
+    ));
+  }
 
-      angleData[latLngKey(from)] = angle;
-    }
+  double calculateHarverSine(LatLng a, LatLng b) {
+    // HaverSine Formula
+    // θ = d/r
+    // hav(θ) = hav(Δφ) + cos(φ1)cos(φ2)hav(Δλ)
+    //        = sin^2(θ/2) = (1-cos(θ)/2
+    // d = r * archav(h) = 2r * arcsin(sqrt(h))
+    //   = 2r * arcsin(sqrt(hav(Δφ) + cos(φ1)cos(φ2)hav(Δλ)
+    //   = 2r * arcsin(sqrt(sin^2(Δφ/2) + cos(φ1)cos(φ2)sin^2(Δλ/2)))
+
+    double lat1 = degToRadian(a.latitude);
+    double lat2 = degToRadian(b.latitude);
+
+    double lon1 = degToRadian(a.longitude);
+    double lon2 = degToRadian(b.longitude);
+
+    double dLat = lat2 - lat1;
+    double dLon = lon2 - lon1;
+
+    return 2*earthRadius * asin(
+      sqrt(
+        pow(sin(dLat/2), 2)
+            + cos(lat1) * cos(lat2) * pow(sin(dLon/2), 2)
+      )
+    );
   }
 
   String getAngleString() {
     String result = '';
 
-    for (var entry in angleData.entries) {
-      result += '${entry.key}  ----->  ${entry.value.toStringAsFixed(2)}\n';
+    for (var entry in _angleData.entries) {
+      result += '${entry.key.toString()}  ----->  ${entry.value.toStringAsFixed(2)}\n';
     }
 
     return result;
   }
 
-  double calculateRelativeHeading(double absoluteHeading, double userNorthHeading) {
-    double relative = (absoluteHeading - userNorthHeading + 360) % 360;
-    return relative;
+  String convertAngleToNSWE(double angle) {
+    angle %= 360;
+
+    if (angle >= 315 || angle < 45) return 'N';
+    if (angle >= 45 && angle < 135) return 'E';
+    if (angle >= 135 && angle < 225) return 'S';
+    if (angle >= 225 && angle < 315) return 'W';
+
+    return "Unknown";
+  }
+
+  Future<Map<String, double>> calculateVibrationType(LatLng target) async {
+    // 사용자 위치랑 매개변수 위치
+    Position currentPos = await Geolocator.getCurrentPosition(
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+      )
+    );
+
+    double angle = calculateBearing(
+        LatLng(currentPos.latitude, currentPos.longitude),
+        target
+    );
+
+    String type = "";
+    if (angle >= _angleThreshold && angle < 180 - _angleThreshold) {
+      type = "R";
+    }
+    else if (angle > 180 + _angleThreshold && angle < 360 - _angleThreshold) {
+      type = "L";
+    }
+    else if (angle >= 180 - _angleThreshold && angle <= 180 + _angleThreshold) {
+      type = "U";
+    } else {
+      type = "S";
+    }
+
+    return {
+      type: angle
+    };
+  }
+
+  LatLng? _getNearestCorner(LatLng pos) {
+    double minDist = double.infinity;
+    LatLng? closest;
+
+    for (LatLng corner in _angleData.keys) {
+      final dist = calculateHarverSine(pos, corner);
+
+      if (dist < minDist) {
+        minDist = dist;
+        closest = corner;
+      }
+    }
+
+    return closest;
+  }
+
+  void _startNavigation() {
+    _compassSub = FlutterCompass.events?.listen((event) async {
+      // 다음 회전 계산하기
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation
+        )
+      );
+
+      final nextCorner = _getNearestCorner(pos as LatLng);
+      Map<String, double> nextVibrationType = await calculateVibrationType(nextCorner!);
+      String type = nextVibrationType.keys.first;
+      double angle = nextVibrationType.values.first;
+
+      while ((angle - event.heading!).abs() > _angleThreshold) {
+        // TODO : Send Bluetooth Signal with angle
+      }
+    });
   }
 
   @override
@@ -362,6 +454,48 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth  = MediaQuery.of(context).size.width;
 
+    if (_isEnterSplash) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Text.rich(
+            TextSpan(
+              style: TextStyle(
+                fontSize: 28,
+                letterSpacing: 15,
+              ),
+              children: [
+                TextSpan(
+                  text: 'NAVI',
+                  style: TextStyle(
+                    color: Color.fromRGBO(0, 47, 255, 1),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextSpan(
+                  text: 'GATION\n',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                TextSpan(
+                  text: 'VI',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                TextSpan(
+                  text: 'BRATION',
+                  style: TextStyle(
+                    color: Color.fromRGBO(0, 47, 255, 1),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
         backgroundColor: Color.fromRGBO(250, 250, 250, 1),
@@ -545,21 +679,45 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                 onPressed: () async {
                                   print("no_movement_notice");
                                   await playAudio("no_movement_notice.mp3", onComplete: () {
-                                    _startListeningToCompass();
-                                    playAudio("start_navi.mp3");
+                                    () async {
+                                      _startListeningToCompass();
+                                      calculateAngleData();
+
+                                      await playAudio("start_navi.mp3");
+
+                                      try {
+                                        await Clipboard.setData(
+                                            ClipboardData(text: getAngleString())
+                                        );
+                                      } catch (e, stackTrace) {
+                                        String errorMessage = "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
+                                        print(errorMessage);
+
+                                        await Clipboard.setData(
+                                            ClipboardData(text: errorMessage)
+                                        );
+
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('내부 오류 발생. 에러메시지 복사됨.'),
+                                            ),
+                                          );
+                                        }
+                                      }
+
+                                      _startNavigation();
+
+                                      // 사용자 방향 조정하기
+
+                                    }(); // async 함수 즉시 실행
                                   });
 
                                   // TODO : 안내 신호 보내기
 
-                                  Clipboard.setData(
-                                      ClipboardData(text: getAngleString())
-                                  );
-
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('각 데이터가 복사됨.'),
-                                    ),
-                                  );
+                                  // Clipboard.setData(
+                                  //     ClipboardData(text: getAngleString())
+                                  // );
                                 },
                               )
                             ],

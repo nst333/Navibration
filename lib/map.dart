@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 class MapPage extends StatefulWidget {
@@ -21,6 +26,11 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  LatLng? _currentPosition;
+  double? _heading;
+  StreamSubscription<Position>? _positionStream;
+  StreamSubscription<CompassEvent>? _compassStream;
+
   // 사용할 스타일들 정의
   Map<String, String> _styles = {
     'OSM Standard': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -31,6 +41,44 @@ class _MapPageState extends State<MapPage> {
   };
 
   String _currentStyleName = 'OSM Standard';
+
+  @override
+  void initState() {
+    super.initState();
+    _initLocation();
+    _initCompass();
+  }
+
+  Future<void> _initLocation() async {
+    final permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.deniedForever) return;
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 2,
+      ),
+    ).listen((Position position) {
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
+      });
+    });
+  }
+
+  void _initCompass() {
+    _compassStream = FlutterCompass.events?.listen((event) {
+      setState(() {
+        _heading = event.heading;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    _compassStream?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +96,25 @@ class _MapPageState extends State<MapPage> {
             urlTemplate: _styles[_currentStyleName]!,
             userAgentPackageName: 'io.github.nst33',
           ),
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _currentPosition!,
+                width: 80,
+                height: 80,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_heading != null)
+                      Transform.rotate(
+                        angle: (_heading! * math.pi) / 180,
+                        child: Icon(Icons.arrow_circle_up_rounded, size: 50, color: Colors.blue),
+                      )
+                  ],
+                )
+              )
+            ],
+          ),
           if (widget.routePoints.isNotEmpty)
             PolylineLayer(
               polylines: [
@@ -57,7 +124,7 @@ class _MapPageState extends State<MapPage> {
                   color: Colors.blue
                 )
               ],
-            )
+            ),
         ],
       ),
     );
