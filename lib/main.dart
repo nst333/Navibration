@@ -229,7 +229,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         desiredAccuracy: LocationAccuracy.bestForNavigation
     );
 
-
     final routeData = await APIService.fetchPedestrianRoute(
       startLat: position.latitude,
       startLng: position.longitude,
