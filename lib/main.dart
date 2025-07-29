@@ -47,13 +47,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
-  late AnimationController _animController;
+  late AnimationController _slideAnimController;
   late Animation<Offset> _slideAnim;
   bool isMenuOpen = false;
 
   bool _submitted = false;
   bool _focused = false;
-  bool _showMap = false;
   bool _isEnterSplash = true;
   Map<String, dynamic>? _pathData;
   Map<LatLng, double> _angleData = {};
@@ -110,7 +109,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         if (mounted) {
           setState(() {
             _submitted = false;
-            _showMap = false;
           });
         }
       }
@@ -127,7 +125,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       }
     });
 
-    _animController = AnimationController(
+    _slideAnimController = AnimationController(
       vsync: this,
       duration: _animDuration
     );
@@ -136,17 +134,17 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       begin: Offset(-1, 0),
       end: Offset(0, 0)
     ).animate(CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeInOut
+      parent: _slideAnimController,
+      curve: Curves.easeInOutQuint
     ));
   }
 
   void toggleMenu() {
     setState(() {
       if (isMenuOpen) {
-        _animController.reverse();
+        _slideAnimController.reverse();
       } else {
-        _animController.forward();
+        _slideAnimController.forward();
       }
       isMenuOpen = !isMenuOpen;
     });
@@ -175,7 +173,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     } else {
       setState(() {
         _submitted = false;
-        _showMap = false;
       });
     }
   }
@@ -184,7 +181,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
-    _animController.dispose();
+    _slideAnimController.dispose();
     _compassSub?.cancel();
     super.dispose();
   }
@@ -244,7 +241,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
       setState(() {
         _submitted = true;
-        _showMap = true;
       });
       _focusNode.unfocus();
     } else {
@@ -592,7 +588,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       FlutterCompass.events!,
           (Position p, CompassEvent c) => (p, c.heading),
     )
-        .sampleTime(const Duration(milliseconds: 100))   // 10 Hz 샘플
+        .sampleTime(const Duration(milliseconds: 100))   // 10Hz 샘플
         .listen((tuple) async {
       final (Position p, double? heading) = tuple;
       if (heading == null) return;
@@ -665,10 +661,10 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         body: Stack(
           children: [
             // MapPage
-            if (_showMap && _pathData?["linePoints"] != null && _pathData?["linePoints"] is List<LatLng>)
+            if (_submitted && _pathData?["linePoints"] != null && _pathData?["linePoints"] is List<LatLng>)
               AnimatedOpacity(
                 duration: Duration(milliseconds: _animDuration.inMilliseconds + 200),
-                opacity: _showMap ? 1 : 0,
+                opacity: _submitted ? 1 : 0,
                 child: MapPage(
                   routePoints: _pathData?["linePoints"] ?? [],
                   startPoint: _pathData?['startPoint'] ?? LatLng(0, 0),
@@ -708,7 +704,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                       bottom: _submitted ? (screenHeight / 2) + (screenHeight * (20/100)) : 0,
                     ),
                     duration: _animDuration,
-                    curve: Curves.easeInOut,
+                    curve: Curves.easeInOutQuint,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 45),
                       child: Container(
@@ -1065,7 +1061,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 duration: _animDuration,
                 child: SafeArea(
                   child: Container(
-                    height: 100,
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.start,
@@ -1073,7 +1068,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                         IconButton(
                           icon: AnimatedIcon(
                             icon: AnimatedIcons.menu_close,
-                            progress: _animController,
+                            progress: _slideAnimController,
                             color: Colors.black,
                             size: 28,
                           ),
