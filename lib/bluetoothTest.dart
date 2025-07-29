@@ -95,7 +95,7 @@ class PiBluetoothService {
     final req = await [
       Permission.bluetoothConnect,
       Permission.bluetoothScan,
-      Permission.location, // <= Android 11 이하에서 still required
+      Permission.location, // <= Android 11 이하에서 still required
     ].request();
 
     return req.values.every((status) => status.isGranted);

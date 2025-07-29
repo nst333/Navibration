@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:rxdart/rxdart.dart';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -7,11 +10,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navibration/bluetoothTest.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
+
+const double _deg2rad = pi / 180;
+const double _rad2deg = 180 / pi;
+@pragma('vm:prefer-inline')
+double _d2r(double deg) => deg * _deg2rad;
+double _r2d(double rad) => rad * _rad2deg;
 
 void main() {
   runApp(
@@ -19,8 +27,7 @@ void main() {
         theme: ThemeData(
             fontFamily: 'NotoSansKR'
         ),
-        //home: MyApp(),
-        home: PiBluetoothService(),
+        home: MyApp(),
         debugShowCheckedModeBanner: true,
       ),
   );
@@ -36,6 +43,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
+
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
@@ -76,6 +84,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   BuildContext? _popupContext;
 
   final AudioPlayer _player = AudioPlayer();
+  final Map<String, Duration> _audioDurCache = {};
 
   StreamSubscription<CompassEvent>? _compassSub;
 
@@ -296,51 +305,94 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
   }
 
+  // void _startListeningToCompass() {
+  //   print("_startListeningToCompass run");
+  //
+  //   _compassSub?.cancel();
+  //   _compassSub = FlutterCompass.events?.listen((event) async {
+  //     final currentHeading = event.heading;
+  //     if (currentHeading == null) return;
+  //
+  //     if (_lastHeading != null) {
+  //       double delta = _angleDifference(currentHeading, _lastHeading!);
+  //
+  //       if (!_headingConfirmed) {
+  //         if (delta < _stabilityThreshold) {
+  //           _stableTicks++;
+  //
+  //           if (_stableTicks == 1) {
+  //             _showDirectionPopup("📡 방향 안정화 중입니다...\n핸드폰을 고정해 주세요.");
+  //           }
+  //
+  //           if (_stableTicks >= _requiredStableTicks) {
+  //             // debugPrint("🧭 방향 안정화 확정 (연속 $_requiredStableTicks 프레임)");
+  //             // _headingConfirmed = true;
+  //             // await _speakAndConfirm(currentHeading);
+  //
+  //             debugPrint("🧭 방향 안정화 확정됨");
+  //             _headingConfirmed = true;
+  //
+  //             _showDirectionPopup("🧭 방향 안정화 확정됨");
+  //             await Future.delayed(Duration(seconds: 1)); // 완료 메시지 보여주기
+  //
+  //             _hideDirectionPopup();
+  //             await _speakAndConfirm(currentHeading);
+  //           }
+  //         } else {
+  //           if (_stableTicks > 0) {
+  //             debugPrint("🌀 방향 흔들림 감지됨. 안정 카운트 초기화");
+  //           }
+  //           _stableTicks = 0;
+  //         }
+  //       }
+  //     }
+  //
+  //     _lastHeading = currentHeading;
+  //     setState(() {});
+  //   });
+  // }
   void _startListeningToCompass() {
-    print("_startListeningToCompass run");
-
     _compassSub?.cancel();
-    _compassSub = FlutterCompass.events?.listen((event) async {
-      final currentHeading = event.heading;
-      if (currentHeading == null) return;
 
-      if (_lastHeading != null) {
-        double delta = _angleDifference(currentHeading, _lastHeading!);
+    _compassSub = FlutterCompass.events
+      ?.where((e) => e.heading != null)
+      .throttleTime(const Duration(milliseconds: 20))
+      .distinct((p, n) => _angleDifference(p.heading!, n.heading!) < 1)
+      .listen(_handleCompassEvent);
+  }
 
-        if (!_headingConfirmed) {
-          if (delta < _stabilityThreshold) {
-            _stableTicks++;
+  void _handleCompassEvent(CompassEvent event) async {
+    final currentHeading = event.heading!;
+    if (_lastHeading != null) {
+      final delta = _angleDifference(currentHeading, _lastHeading!);
 
-            if (_stableTicks == 1) {
-              _showDirectionPopup("📡 방향 안정화 중입니다...\n핸드폰을 고정해 주세요.");
-            }
+      if (!_headingConfirmed) {
+        if (delta < _stabilityThreshold) {
+          _stableTicks++;
 
-            if (_stableTicks >= _requiredStableTicks) {
-              // debugPrint("🧭 방향 안정화 확정 (연속 $_requiredStableTicks 프레임)");
-              // _headingConfirmed = true;
-              // await _speakAndConfirm(currentHeading);
-
-              debugPrint("🧭 방향 안정화 확정됨");
-              _headingConfirmed = true;
-
-              _showDirectionPopup("🧭 방향 안정화 확정됨");
-              await Future.delayed(Duration(seconds: 1)); // 완료 메시지 보여주기
-
-              _hideDirectionPopup();
-              await _speakAndConfirm(currentHeading);
-            }
-          } else {
-            if (_stableTicks > 0) {
-              debugPrint("🌀 방향 흔들림 감지됨. 안정 카운트 초기화");
-            }
-            _stableTicks = 0;
+          if (_stableTicks == 1) {
+            _showDirectionPopup("📡 방향 안정화 중입니다...\n핸드폰을 고정해 주세요.");
           }
+
+          if (_stableTicks >= _requiredStableTicks) {
+            debugPrint("🧭 방향 안정화 확정됨");
+            _headingConfirmed = true;
+
+            _showDirectionPopup("🧭 방향 안정화 확정됨");
+            await Future.delayed(const Duration(seconds: 1));
+            _hideDirectionPopup();
+
+            await _speakAndConfirm(currentHeading);
+          }
+        } else {
+          if (_stableTicks > 0) debugPrint("🌀 흔들림 감지 → 카운트 초기화");
+          _stableTicks = 0;
         }
       }
+    }
 
-      _lastHeading = currentHeading;
-      setState(() {});
-    });
+    _lastHeading = currentHeading;
+    if (mounted) setState(() {}); // UI 갱신
   }
 
   Future<void> _setStartDirection(double heading) async {
@@ -357,12 +409,16 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Future<void> playAudio(String filename, {VoidCallback? onComplete}) async {
     try {
       await _player.stop();
+
+      _audioDurCache.putIfAbsent(filename, () async {
+        await _player.setSource(AssetSource('audio/$filename'));
+        return await _player.getDuration() ?? const Duration(seconds: 3);
+      } as Duration Function());
+
       await _player.play(AssetSource('audio/$filename'));
 
-      Duration? duration = await _player.getDuration();
-      await Future.delayed(duration ?? Duration(seconds: 3));
-
-      if (onComplete != null) onComplete();
+      await Future.delayed(_audioDurCache[filename]!);
+      onComplete?.call();
     } catch (e) {
       debugPrint("🔊 오디오 재생 오류: $e");
     }
@@ -416,12 +472,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     // Bearing Formula
     // θ = atan2( sin Δλ ⋅ cos φ2 , cos φ1 ⋅ sin φ2 − sin φ1 ⋅ cos φ2 ⋅ cos Δλ )
 
-    double phi1 = degToRadian(a.latitude);
-    double phi2 = degToRadian(b.latitude);
-    double lambda1 = degToRadian(a.longitude);
-    double lambda2 = degToRadian(b.longitude);
+    double phi1 = _d2r(a.latitude);
+    double phi2 = _d2r(b.latitude);
+    double lambda1 = _d2r(a.longitude);
+    double lambda2 = _d2r(b.longitude);
 
-    return _toRelativeAngle(radianToDeg(
+    return _toRelativeAngle(_r2d(
         atan2(
             sin(lambda2 - lambda1) * cos(phi2),
 
@@ -439,11 +495,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     //   = 2r * arcsin(sqrt(hav(Δφ) + cos(φ1)cos(φ2)hav(Δλ)
     //   = 2r * arcsin(sqrt(sin^2(Δφ/2) + cos(φ1)cos(φ2)sin^2(Δλ/2)))
 
-    double lat1 = degToRadian(a.latitude);
-    double lat2 = degToRadian(b.latitude);
+    double lat1 = _d2r(a.latitude);
+    double lat2 = _d2r(b.latitude);
 
-    double lon1 = degToRadian(a.longitude);
-    double lon2 = degToRadian(b.longitude);
+    double lon1 = _d2r(a.longitude);
+    double lon2 = _d2r(b.longitude);
 
     double dLat = lat2 - lat1;
     double dLon = lon2 - lon1;
@@ -525,23 +581,33 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 
   void _startNavigation() {
-    _compassSub = FlutterCompass.events?.listen((event) async {
-      // 다음 회전 계산하기
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation
-        )
-      );
+    final posStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+      )
+    );
 
-      final nextCorner = _getNearestCorner(pos as LatLng);
-      Map<String, double> nextVibrationType = await calculateVibrationType(nextCorner!);
-      String type = nextVibrationType.keys.first;
-      double angle = nextVibrationType.values.first;
+    _compassSub?.cancel();
+    _compassSub = Rx.combineLatest2(
+      posStream,
+      FlutterCompass.events!,
+          (Position p, CompassEvent c) => (p, c.heading),
+    )
+        .sampleTime(const Duration(milliseconds: 100))   // 10 Hz 샘플
+        .listen((tuple) async {
+      final (Position p, double? heading) = tuple;
+      if (heading == null) return;
 
-      while ((angle - event.heading!).abs() > _angleThreshold) {
-        // TODO : Send Bluetooth Signal with angle
+      final nextCorner = _getNearestCorner(LatLng(p.latitude, p.longitude));
+      if (nextCorner == null) return;
+
+      final vibrationInfo = await calculateVibrationType(nextCorner);
+      final angle = vibrationInfo.values.first;
+
+      if ((angle - heading).abs() > _angleThreshold) {
+        // TODO: 블루투스에 angle & 패턴 전송
       }
-    });
+    }) as StreamSubscription<CompassEvent>?;
   }
 
   @override
@@ -1173,79 +1239,70 @@ class APIService {
     required double startLng,
     required double endLat,
     required double endLng,
-    required String pathMode
+    required String pathMode,
   }) async {
     final uri = Uri.https(
       'apis.openapi.sk.com',
       '/tmap/routes/pedestrian',
-      {
-        'version': '1',
-        'format': 'json',
+      {'version': '1', 'format': 'json'},
+    );
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'appKey': _appKey,
+      },
+      body: {
+        'startX': '$startLng',
+        'startY': '$startLat',
+        'endX': '$endLng',
+        'endY': '$endLat',
+        'searchOption': pathMode,
+        'reqCoordType': 'WGS84GEO',
+        'startName': '출발지',
+        'endName': '도착지',
       },
     );
 
-    final headers = {
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      'appKey': _appKey,
-    };
-
-    final body = {
-      'startX': startLng.toString(),
-      'startY': startLat.toString(),
-      'endX': endLng.toString(),
-      'endY': endLat.toString(),
-      'searchOption': pathMode,
-      'reqCoordType': 'WGS84GEO',
-      'startName': '출발지',
-      'endName': '도착지',
-    };
-
-    final response = await http.post(uri, headers: headers, body: body);
     if (response.statusCode != 200) return null;
-    final data = jsonDecode(response.body);
+
+    // ★ UI 스레드 끊김 방지를 위해 compute 사용
+    final data = await compute(jsonDecode, response.body);
 
     final features = data["features"];
+    if (features == null) return null;
 
-    List<String> descriptions = [];
-    List<LatLng> linePoints = [];
+    final List<String> descriptions = [];
+    final List<LatLng> linePoints = [];
 
-    final firstFeatures = features.firstWhere(
-      (f) => (f["properties"]?["totalDistance"] != null) && (f["properties"]?["totalTime"] != null),
-      orElse: () => null
-    );
-    if (firstFeatures == null) return null;
-
-    double totalKm;
-    double totalHour;
-
+    double totalKm = -1, totalHour = -1;
     try {
       totalKm = features[0]["properties"]["totalDistance"] / 1000;
       totalHour = features[0]["properties"]["totalTime"] / 60;
-    } catch (Exception) {
-      totalKm = -1;
-      totalHour = -1;
-    }
+    } catch (_) {}
 
-    for (final feature in features) {
-      // Point면 PolyLine 용 꼭짓점 모으기
-      // LineString이면 이동 설명 모으기
-
-      if (feature["geometry"]["type"] == "Point") {
-        linePoints.add(LatLng(feature["geometry"]["coordinates"][1], feature["geometry"]["coordinates"][0]));
-      }
-      else if (feature["geometry"]["type"] == "LineString") {
-        descriptions.add(feature["properties"]["description"]);
+    for (final f in features) {
+      switch (f["geometry"]["type"]) {
+        case "Point":
+          linePoints.add(LatLng(
+            f["geometry"]["coordinates"][1],
+            f["geometry"]["coordinates"][0],
+          ));
+          break;
+        case "LineString":
+          descriptions.add(f["properties"]["description"]);
+          break;
       }
     }
 
     return {
-      'startPoint' : LatLng(startLat, startLng),
-      'endPoint'   : LatLng(endLat, endLng),
-
-      'totalKm' : totalKm,
-      'totalHour' : totalHour,
-      'descriptions' : descriptions,
-      'linePoints' : linePoints
+      'startPoint': LatLng(startLat, startLng),
+      'endPoint': LatLng(endLat, endLng),
+      'totalKm': totalKm,
+      'totalHour': totalHour,
+      'descriptions': descriptions,
+      'linePoints': linePoints,
     };
   }
 }
