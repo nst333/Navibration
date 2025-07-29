@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navibration/bluetoothTest.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -18,8 +19,8 @@ void main() {
         theme: ThemeData(
             fontFamily: 'NotoSansKR'
         ),
-        home: MyApp(),
-        //home: CompassTestPage(),
+        //home: MyApp(),
+        home: PiBluetoothService(),
         debugShowCheckedModeBanner: true,
       ),
   );
