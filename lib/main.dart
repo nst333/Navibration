@@ -28,7 +28,7 @@ void main() {
             fontFamily: 'NotoSansKR'
         ),
         home: MyApp(),
-        debugShowCheckedModeBanner: true,
+        debugShowCheckedModeBanner: false,
       ),
   );
 }
@@ -97,7 +97,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    Future.delayed(Duration(seconds: 1), () {
+    Future.delayed(Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
           _isEnterSplash = false;
