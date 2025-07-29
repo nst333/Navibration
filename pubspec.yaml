@@ -84,6 +84,7 @@ flutter:
    - assets/images/icon_2_3_3.png
    - assets/images/icon_2_3_4.png
    - assets/map.html
+   - assets/audio/wait_a_minute.mp3
    - assets/audio/no_movement_notice.mp3
    - assets/audio/position_check.mp3
    - assets/audio/start_navi.mp3

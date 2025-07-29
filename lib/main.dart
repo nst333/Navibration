@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navibration/compass_test.dart';
 import 'package:navibration/map.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -48,7 +47,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   bool _showMap = false;
   bool _isEnterSplash = true;
   Map<String, dynamic>? _pathData;
-
   Map<LatLng, double> _angleData = {};
 
   static const _animDuration = Duration(milliseconds: 500);
@@ -65,9 +63,16 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   int _pathCount = 10;
 
   double? _lastHeading;
-  Timer? _confirmationTimer;
   double _stabilityThreshold = 3;
   double? _finalHeading;
+  int _stableTicks = 0;
+  final int _requiredStableTicks = 20;
+  bool _headingConfirmed = false;
+  bool _startSoundPlayed = false;
+  bool _startNavi = false;
+
+  bool _isShowingPopup = false;
+  BuildContext? _popupContext;
 
   final AudioPlayer _player = AudioPlayer();
 
@@ -156,6 +161,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
           places,
           (name, pos) => _handleSelectedDestination(name, pos)
       );
+      playAudio("wait_a_minute.mp3");
     } else {
       setState(() {
         _submitted = false;
@@ -241,11 +247,51 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
   }
 
-  void calculateAngleData() {
-    List<LatLng> points = _pathData!["linePoints"];
+  void _showDirectionPopup(String message) {
+    if (_isShowingPopup) return; // 이미 열려 있으면 다시 열지 않음
 
-    for (int i = 1; i < points.length; i++) {
-      _angleData[points[i-1]] = calculateBearing(points[i-1], points[i]);
+    _isShowingPopup = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        _popupContext = dialogContext;
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: Color.fromRGBO(0, 47, 255, 1),
+              width: 2,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hideDirectionPopup() {
+    if (_isShowingPopup && _popupContext != null) {
+      Navigator.of(_popupContext!).pop();
+      _isShowingPopup = false;
+      _popupContext = null;
     }
   }
 
@@ -260,38 +306,45 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       if (_lastHeading != null) {
         double delta = _angleDifference(currentHeading, _lastHeading!);
 
-        if (delta < _stabilityThreshold) {
-          _speakAndConfirm(currentHeading);
+        if (!_headingConfirmed) {
+          if (delta < _stabilityThreshold) {
+            _stableTicks++;
+
+            if (_stableTicks == 1) {
+              _showDirectionPopup("📡 방향 안정화 중입니다...\n핸드폰을 고정해 주세요.");
+            }
+
+            if (_stableTicks >= _requiredStableTicks) {
+              // debugPrint("🧭 방향 안정화 확정 (연속 $_requiredStableTicks 프레임)");
+              // _headingConfirmed = true;
+              // await _speakAndConfirm(currentHeading);
+
+              debugPrint("🧭 방향 안정화 확정됨");
+              _headingConfirmed = true;
+
+              _showDirectionPopup("🧭 방향 안정화 확정됨");
+              await Future.delayed(Duration(seconds: 1)); // 완료 메시지 보여주기
+
+              _hideDirectionPopup();
+              await _speakAndConfirm(currentHeading);
+            }
+          } else {
+            if (_stableTicks > 0) {
+              debugPrint("🌀 방향 흔들림 감지됨. 안정 카운트 초기화");
+            }
+            _stableTicks = 0;
+          }
         }
       }
 
       _lastHeading = currentHeading;
-
       setState(() {});
     });
   }
 
-  double _angleDifference(double a, double b) {
-    double diff = (a - b).abs();
-    return diff > 180 ? 360 - diff : diff;
-  }
-
-  double _toRelativeAngle(double angle) {
-    return (angle - _finalHeading! + 360) % 360;
-  }
-
-  void _speakAndConfirm(double heading) async {
-    if (_confirmationTimer != null) return;
-
-    await playAudio("position_check");
-
-    _confirmationTimer = Timer(Duration(seconds: 3), () {
-      _setStartDirection(heading);
-    });
-  }
-
-  void _setStartDirection(double heading) {
+  Future<void> _setStartDirection(double heading) async {
     debugPrint("🧭 설정 완료! 시작 방향은 $heading 도");
+
     _finalHeading = heading;
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -312,6 +365,50 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     } catch (e) {
       debugPrint("🔊 오디오 재생 오류: $e");
     }
+  }
+
+  // void _speakAndConfirm(double heading) async {
+  //   if (_confirmationTimer != null) return;
+  //
+  //   await playAudio("position_check.mp3");
+  //
+  //   _confirmationTimer = Timer(Duration(seconds: 3), () async {
+  //     await _setStartDirection(heading);
+  //
+  //     await playAudio("start_navi.mp3");
+  //   });
+  // }
+
+  Future<void> _speakAndConfirm(double heading) async {
+    if (_startSoundPlayed) return;
+
+    debugPrint("🧭 방향 안정화 감지됨. 확인 및 설정 시작");
+
+    await playAudio("position_check.mp3");
+
+    await Future.delayed(Duration(seconds: 3)); // 사용자 확인 기다림
+
+    await _setStartDirection(heading);
+
+    await playAudio("start_navi.mp3");
+    _startSoundPlayed = true;
+  }
+
+  void calculateAngleData() {
+    List<LatLng> points = _pathData!["linePoints"];
+
+    for (int i = 1; i < points.length; i++) {
+      _angleData[points[i-1]] = calculateBearing(points[i-1], points[i]);
+    }
+  }
+
+  double _angleDifference(double a, double b) {
+    double diff = (a - b).abs();
+    return diff > 180 ? 360 - diff : diff;
+  }
+
+  double _toRelativeAngle(double angle) {
+    return (angle - _finalHeading! + 360) % 360;
   }
 
   double calculateBearing(LatLng a, LatLng b) {
@@ -462,7 +559,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
             TextSpan(
               style: TextStyle(
                 fontSize: 28,
-                letterSpacing: 15,
+                letterSpacing: 10,
               ),
               children: [
                 TextSpan(
@@ -649,8 +746,8 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                           Column(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Text(_controller.text, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),),
-                              Text("장소 이름", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),),
+                              Text(APIService.selectedName, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),),
+                              Text(APIService.selectedAddr, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),),
                             ],
                           ),
 
@@ -677,47 +774,48 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                                   ),
                                 ),
                                 onPressed: () async {
-                                  print("no_movement_notice");
-                                  await playAudio("no_movement_notice.mp3", onComplete: () {
-                                    () async {
-                                      _startListeningToCompass();
-                                      calculateAngleData();
+                                  if (!_startNavi) {
+                                    _startNavi = true;
+                                    print("no_movement_notice");
+                                    await playAudio("no_movement_notice.mp3", onComplete: () {
+                                      () async {
+                                        _startListeningToCompass();
+                                        calculateAngleData();
 
-                                      await playAudio("start_navi.mp3");
-
-                                      try {
-                                        await Clipboard.setData(
-                                            ClipboardData(text: getAngleString())
-                                        );
-                                      } catch (e, stackTrace) {
-                                        String errorMessage = "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
-                                        print(errorMessage);
-
-                                        await Clipboard.setData(
-                                            ClipboardData(text: errorMessage)
-                                        );
-
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('내부 오류 발생. 에러메시지 복사됨.'),
-                                            ),
+                                        try {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: getAngleString())
                                           );
+                                        } catch (e, stackTrace) {
+                                          String errorMessage = "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
+                                          print(errorMessage);
+
+                                          await Clipboard.setData(
+                                              ClipboardData(text: errorMessage)
+                                          );
+
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('내부 오류 발생. 에러메시지 복사됨.'),
+                                              ),
+                                            );
+                                          }
                                         }
-                                      }
 
-                                      _startNavigation();
+                                        _startNavigation();
 
-                                      // 사용자 방향 조정하기
+                                        // 사용자 방향 조정하기
 
-                                    }(); // async 함수 즉시 실행
-                                  });
+                                      }(); // async 함수 즉시 실행
+                                    });
 
-                                  // TODO : 안내 신호 보내기
+                                    // TODO : 안내 신호 보내기
 
-                                  // Clipboard.setData(
-                                  //     ClipboardData(text: getAngleString())
-                                  // );
+                                    // Clipboard.setData(
+                                    //     ClipboardData(text: getAngleString())
+                                    // );
+                                  }
                                 },
                               )
                             ],
@@ -930,6 +1028,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 class APIService {
   static const _appKey = 'oTTP497zZS5eps0zfeuTJ16mujxhkO2Y6DSF3k05';
   static String selectedName = "";
+  static String selectedAddr = "";
   static LatLng selectedPos = LatLng(0, 0);
 
   static void showDestinationDialog(
@@ -970,6 +1069,7 @@ class APIService {
                         return GestureDetector(
                           onTap: () {
                             selectedName = places[index].keys.first.split("|||").first;
+                            selectedAddr = places[index].keys.first.split("|||").last;
                             selectedPos = places[index].values.first;
 
                             ScaffoldMessenger.of(context).showSnackBar(
