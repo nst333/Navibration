@@ -11,12 +11,14 @@ class MapPage extends StatefulWidget {
   final List<LatLng> routePoints;
   final LatLng startPoint;
   final LatLng endPoint;
+  final LatLng currentPos;
   const MapPage(
       {
         Key? key,
         required this.routePoints,
         required this.startPoint,
-        required this.endPoint
+        required this.endPoint,
+        required this.currentPos
       }
       ) : super(key: key
   );
@@ -26,7 +28,6 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  LatLng? _currentPosition;
   double? _heading;
   StreamSubscription<Position>? _positionStream;
   StreamSubscription<CompassEvent>? _compassStream;
@@ -45,24 +46,7 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
-    _initLocation();
     _initCompass();
-  }
-
-  Future<void> _initLocation() async {
-    final permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.deniedForever) return;
-
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 2,
-      ),
-    ).listen((Position position) {
-      setState(() {
-        _currentPosition = LatLng(position.latitude, position.longitude);
-      });
-    });
   }
 
   void _initCompass() {
@@ -99,7 +83,7 @@ class _MapPageState extends State<MapPage> {
           MarkerLayer(
             markers: [
               Marker(
-                point: _currentPosition!,
+                point: widget.currentPos,
                 width: 80,
                 height: 80,
                 child: Stack(

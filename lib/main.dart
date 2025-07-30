@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/foundation.dart';
+import 'package:navibration/dialogTest.dart';
+import 'package:navibration/directionIndicator.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -23,26 +26,26 @@ double _r2d(double rad) => rad * _rad2deg;
 
 void main() {
   runApp(
-      MaterialApp(
-        theme: ThemeData(
-            fontFamily: 'NotoSansKR'
-        ),
-        home: MyApp(),
-        debugShowCheckedModeBanner: false,
-      ),
+    MaterialApp(
+      home: MainApp(),
+      //home: DialogTest(),
+      //home: Directionindicator(),
+    )
   );
 }
+
+//void main() => runApp(MainApp());
 //void main() => runApp(MapPage());
 //void main() => runApp(SearchMapPage());
 
-class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+class MainApp extends StatefulWidget {
+  const MainApp({Key? key}) : super(key: key);
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<MainApp> createState() => _MainAppState();
 }
 
-class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
+class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
 
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
@@ -53,7 +56,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   bool _submitted = false;
   bool _focused = false;
-  bool _isEnterSplash = true;
+  bool _isEnterSplash = false; // TODO : 나중에 true로 다시 바꾸기 (디버깅용으로 false로 임시 설정)
   Map<String, dynamic>? _pathData;
   Map<LatLng, double> _angleData = {};
 
@@ -69,6 +72,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   final List<int> _pathCountList = List.generate(11, (index) => index + 5);
   int _pathCount = 10;
+  late LatLng _currentPos;
 
   double? _lastHeading;
   double _stabilityThreshold = 3;
@@ -83,7 +87,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   BuildContext? _popupContext;
 
   final AudioPlayer _player = AudioPlayer();
-  final Map<String, Duration> _audioDurCache = {};
 
   StreamSubscription<CompassEvent>? _compassSub;
 
@@ -96,13 +99,13 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    Future.delayed(Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isEnterSplash = false;
-        });
-      }
-    });
+    // Future.delayed(Duration(seconds: 2), () {
+    //   if (mounted) {
+    //     setState(() {
+    //       _isEnterSplash = false;
+    //     });
+    //   }
+    // });
 
     _controller.addListener(() {
       if (_controller.text.isEmpty && _submitted) {
@@ -164,12 +167,13 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         return;
       }
 
+      playAudio("select_destination.mp3"); // 목적지를 선택하세요
+
       APIService.showDestinationDialog(
           context,
           places,
           (name, pos) => _handleSelectedDestination(name, pos)
       );
-      playAudio("wait_a_minute.mp3");
     } else {
       setState(() {
         _submitted = false;
@@ -187,10 +191,14 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _handleSelectedDestination(String name, LatLng pos) async {
+    _player.stop();
+
+    debugPrint("enter _handleSelectedDestination");
     bool serviceEnabled;
     LocationPermission permission;
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    debugPrint("serviceEnabled declared");
     if (!serviceEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -201,9 +209,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     }
 
     permission = await Geolocator.checkPermission();
+    print("check permission");
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      print("request permission");
       if (permission == LocationPermission.denied) {
+        print("denied permission");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('위치 권한이 거부되었습니다.'),
@@ -213,7 +224,9 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
       }
     }
 
+    print("check forever denied permission");
     if (permission == LocationPermission.deniedForever) {
+      print("forever denied permission");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('위치 권한이 영구적으로 거부되었습니다.'),
@@ -225,6 +238,8 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
     Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.bestForNavigation
     );
+    _currentPos = LatLng(position.latitude, position.longitude);
+    debugPrint("got position : ${position.latitude} | ${position.longitude}");
 
     final routeData = await APIService.fetchPedestrianRoute(
       startLat: position.latitude,
@@ -404,16 +419,12 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Future<void> playAudio(String filename, {VoidCallback? onComplete}) async {
     try {
       await _player.stop();
-
-      _audioDurCache.putIfAbsent(filename, () async {
-        await _player.setSource(AssetSource('audio/$filename'));
-        return await _player.getDuration() ?? const Duration(seconds: 3);
-      } as Duration Function());
-
       await _player.play(AssetSource('audio/$filename'));
 
-      await Future.delayed(_audioDurCache[filename]!);
-      onComplete?.call();
+      Duration? duration = await _player.getDuration();
+      await Future.delayed(duration ?? Duration(seconds: 3));
+
+      if (onComplete != null) onComplete();
     } catch (e) {
       debugPrint("🔊 오디오 재생 오류: $e");
     }
@@ -669,6 +680,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                   routePoints: _pathData?["linePoints"] ?? [],
                   startPoint: _pathData?['startPoint'] ?? LatLng(0, 0),
                   endPoint: _pathData?['endPoint'] ?? LatLng(0, 0),
+                  currentPos: _currentPos,
                 ),
               ),
 
@@ -720,7 +732,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                             ]
                         ),
 
-                        child: TextField(
+                        child: TextField( // 이거 버튼이 되어야 한다. -> 음성인식 열리고 안내하기 (단점. 사용자가 그냥 목적지만 말하지 않음)
                           controller: _controller,
                           focusNode: _focusNode,
                           textAlign: TextAlign.center,
@@ -768,13 +780,6 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
                   SizedBox(height: 30,),
 
-                  Text(
-                    "가끔 경로를 찾지 못하고 현재 화면에서 멈출 수 있습니다!",
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12
-                    ),
-                  )
                 ],
               ),
             ),
@@ -802,88 +807,105 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                     borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                   ),
                   child: Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // 텍스트 영역
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(APIService.selectedName, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),),
-                              Text(APIService.selectedAddr, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),),
+                              AutoSizeText(
+                                APIService.selectedName,
+                                maxLines: 1,
+                                minFontSize: 12,
+                                stepGranularity: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              AutoSizeText(
+                                APIService.selectedAddr,
+                                maxLines: 2,
+                                minFontSize: 10,
+                                stepGranularity: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 18),
+                              ),
                             ],
                           ),
+                        ),
 
-                          Column(
-                            mainAxisSize: MainAxisSize.max,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CupertinoButton(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      width: 2,
-                                      color: borderColor,
-                                    ),
-                                  ),
-                                  alignment: Alignment.center, // 텍스트 위치 맞추기
-                                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                  child: Text(
-                                    '시작',
-                                    style: TextStyle(
-                                      color: borderColor,
-                                    ),
-                                  ),
-                                ),
-                                onPressed: () async {
-                                  if (!_startNavi) {
-                                    _startNavi = true;
-                                    print("no_movement_notice");
-                                    await playAudio("no_movement_notice.mp3", onComplete: () {
-                                      () async {
-                                        _startListeningToCompass();
-                                        calculateAngleData();
+                        const SizedBox(width: 20),
 
-                                        try {
-                                          await Clipboard.setData(
-                                              ClipboardData(text: getAngleString())
-                                          );
-                                        } catch (e, stackTrace) {
-                                          String errorMessage = "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
-                                          print(errorMessage);
+                        // 시작 버튼
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(vertical: 85),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 20,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                width: 2,
+                                color: borderColor,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '시작',
+                              style: TextStyle(
+                                color: borderColor,
+                              ),
+                            ),
+                          ),
+                          onPressed: () async {
+                            if (!_startNavi) {
+                              _startNavi = true;
+                              print("no_movement_notice");
 
-                                          await Clipboard.setData(
-                                              ClipboardData(text: errorMessage)
-                                          );
+                              await playAudio("no_movement_notice.mp3", onComplete: () {
+                                () async {
+                                  _startListeningToCompass();
+                                  calculateAngleData();
 
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('내부 오류 발생. 에러메시지 복사됨.'),
-                                              ),
-                                            );
-                                          }
-                                        }
+                                  try {
+                                    await Clipboard.setData(
+                                      ClipboardData(text: getAngleString()),
+                                    );
+                                  } catch (e, stackTrace) {
+                                    String errorMessage =
+                                        "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
+                                    print(errorMessage);
 
-                                        _startNavigation();
+                                    await Clipboard.setData(
+                                      ClipboardData(text: errorMessage),
+                                    );
 
-                                        // 사용자 방향 조정하기
-
-                                      }(); // async 함수 즉시 실행
-                                    });
-
-                                    // TODO : 안내 신호 보내기
-
-                                    // Clipboard.setData(
-                                    //     ClipboardData(text: getAngleString())
-                                    // );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('내부 오류 발생. 에러메시지 복사됨.'),
+                                        ),
+                                      );
+                                    }
                                   }
-                                },
-                              )
-                            ],
-                          )
-                        ],
-                      )
+
+                                  _startNavigation();
+                                }(); // 즉시 실행 async
+                              });
+                            }
+                          },
+                        )
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -902,155 +924,161 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
             // 설정탭
             SlideTransition(
               position: _slideAnim,
-              child: Container(
-                width: (screenWidth * 55/100),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                      width: (screenWidth * 55/100),
+                      height: (screenHeight * 95/100),
 
-                decoration: BoxDecoration(
-                  color: Color.fromRGBO(250, 250, 250, 1),
-                  borderRadius: BorderRadius.only(topRight: Radius.circular(20), bottomRight: Radius.circular(20)),
-                  border: Border.all(
-                    width: 2,
-                    color: borderColor,
-                  )
-                ),
-
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: 100,),
-
-                    Column(
-                      children: [
-                        Text(
-                          "경로 성격 설정",
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: textColor
-                          ),
-                        ),
-                        SizedBox(height: 10,),
-                        Padding(
-                          padding: EdgeInsets.only(left: 30),
-                          child: DropdownButton(
-                            value: _pathMode,
-                            hint: const Text("경로 설정"),
-                            items: _pathModes.keys.map((item) {
-                              return DropdownMenuItem(
-                                value: item,
-                                child: Text(item),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              if (_pathMode != value) {
-                                setState(() {
-                                  _pathMode = value!;
-                                });
-                              }
-                            },
+                      decoration: BoxDecoration(
+                          color: Color.fromRGBO(250, 250, 250, 1),
+                          borderRadius: BorderRadius.only(topRight: Radius.circular(20), bottomRight: Radius.circular(20)),
+                          border: Border.all(
+                            width: 2,
+                            color: borderColor,
                           )
-                        ),
+                      ),
 
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: 100,),
 
-
-                        // 나중에 설정값 추가할 때, 구분선 넣고 추가하기
-                        SizedBox(height: 20,),
-
-                        Divider(
-                          color: Colors.grey,
-                          thickness: 1,
-                          height: 20,
-                          indent: 30,
-                          endIndent: 30,
-                        ),
-
-                        SizedBox(height: 20,),
-
-
-
-                        Text(
-                          "목적지 검색 개수",
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: textColor
-                          ),
-                        ),
-                        Text(
-                          '$_pathCount',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black
-                          ),
-                        ),
-                        SizedBox(height: 10,),
-                        CupertinoButton(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                width: 2,
-                                color: borderColor,
-                              ),
-                            ),
-                            alignment: Alignment.center, // 텍스트 위치 맞추기
-                            padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                            child: Text(
-                              '개수 선택',
-                              style: TextStyle(
-                                color: textColor,
-                              ),
-                            ),
-                          ),
-                          onPressed: () {
-                            showCupertinoModalPopup(
-                              context: context,
-                              builder: (_) => Container(
-                                height: 300,
-                                color: Colors.white,
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      alignment: Alignment.centerRight,
-                                      child: CupertinoButton(
-                                        padding: EdgeInsets.zero,
-                                        child: Text(
-                                          "완료",
-                                          style: TextStyle(color: Colors.black),
-                                        ),
-                                        onPressed: () => Navigator.pop(context),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: CupertinoPicker(
-                                        itemExtent: 40,
-                                        scrollController: FixedExtentScrollController(
-                                          initialItem: _pathCount - 5,
-                                        ),
-                                        onSelectedItemChanged: (index) {
-                                          final newValue = _pathCountList[index];
-                                          if (_pathCount != newValue) {
-                                            setState(() {
-                                              _pathCount = newValue;
-                                            });
-                                          }
-                                        },
-                                        children: _pathCountList
-                                            .map((e) => Center(child: Text('$e')))
-                                            .toList(),
-                                      ),
-                                    ),
-                                  ],
+                          Column(
+                            children: [
+                              Text(
+                                "경로 성격 설정",
+                                style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor
                                 ),
                               ),
-                            );
-                          },
-                        )
-                      ],
-                    ),
-                  ],
-                ),
+                              SizedBox(height: 10,),
+                              Padding(
+                                  padding: EdgeInsets.only(left: 30),
+                                  child: DropdownButton(
+                                    value: _pathMode,
+                                    hint: const Text("경로 설정"),
+                                    items: _pathModes.keys.map((item) {
+                                      return DropdownMenuItem(
+                                        value: item,
+                                        child: Text(item),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) {
+                                      if (_pathMode != value) {
+                                        setState(() {
+                                          _pathMode = value!;
+                                        });
+                                      }
+                                    },
+                                  )
+                              ),
+
+
+
+                              // 나중에 설정값 추가할 때, 구분선 넣고 추가하기
+                              SizedBox(height: 20,),
+
+                              Divider(
+                                color: Colors.grey,
+                                thickness: 1,
+                                height: 20,
+                                indent: 30,
+                                endIndent: 30,
+                              ),
+
+                              SizedBox(height: 20,),
+
+
+
+                              Text(
+                                "목적지 검색 개수",
+                                style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor
+                                ),
+                              ),
+                              Text(
+                                '$_pathCount',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black
+                                ),
+                              ),
+                              SizedBox(height: 10,),
+                              CupertinoButton(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      width: 2,
+                                      color: borderColor,
+                                    ),
+                                  ),
+                                  alignment: Alignment.center, // 텍스트 위치 맞추기
+                                  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                                  child: Text(
+                                    '개수 선택',
+                                    style: TextStyle(
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  showCupertinoModalPopup(
+                                    context: context,
+                                    builder: (_) => Container(
+                                      height: 300,
+                                      color: Colors.white,
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                                            alignment: Alignment.centerRight,
+                                            child: CupertinoButton(
+                                              padding: EdgeInsets.zero,
+                                              child: Text(
+                                                "완료",
+                                                style: TextStyle(color: Colors.black),
+                                              ),
+                                              onPressed: () => Navigator.pop(context),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: CupertinoPicker(
+                                              itemExtent: 40,
+                                              scrollController: FixedExtentScrollController(
+                                                initialItem: _pathCount - 5,
+                                              ),
+                                              onSelectedItemChanged: (index) {
+                                                final newValue = _pathCountList[index];
+                                                if (_pathCount != newValue) {
+                                                  setState(() {
+                                                    _pathCount = newValue;
+                                                  });
+                                                }
+                                              },
+                                              children: _pathCountList
+                                                  .map((e) => Center(child: Text('$e')))
+                                                  .toList(),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            ],
+                          ),
+                        ],
+                      )
+                  )
+                ],
               ),
             ),
 
@@ -1061,6 +1089,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 duration: _animDuration,
                 child: SafeArea(
                   child: Container(
+                    height: 100,
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.start,
@@ -1097,21 +1126,21 @@ class APIService {
       List<Map<String, LatLng>> places,
       void Function(String name, LatLng pos) onPlaceSelected
       ) {
-
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) {
-        return Dialog(
+      barrierDismissible: false,
+      transitionDuration: Duration(milliseconds: 700),
+      pageBuilder: (_, __, ___) {
+        return SizedBox();
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOutQuint
+          ),
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.7,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                width: 2,
-                color: Color.fromRGBO(0, 47, 255, 1) // borderColor
-              ),
-              color: Colors.white
-            ),
+            color: Colors.white,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 8),
               child: Column(
@@ -1162,13 +1191,22 @@ class APIService {
                         );
                       },
                     ),
+                  ),
+
+                  SizedBox(height: 8,),
+
+                  IconButton(
+                    icon: Icon(Icons.close, size: 36,),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
                   )
                 ],
               ),
-            )
+            ),
           ),
         );
-      }
+      },
     );
   }
 

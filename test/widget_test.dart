@@ -13,7 +13,7 @@ import 'package:navibration/main.dart';
 void main() {
   testWidgets('MyApp smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MainApp());
 
     // Verify that the search bar is present.
     expect(find.byType(TextField), findsOneWidget);
