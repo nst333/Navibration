@@ -57,7 +57,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
 
   bool _submitted = false;
   bool _focused = false;
-  bool _isEnterSplash = false; // TODO : 나중에 true로 다시 바꾸기 (디버깅용으로 false로 임시 설정)
+  bool _isEnterSplash = true;
   Map<String, dynamic>? _pathData;
   Map<LatLng, double> _angleData = {};
 
@@ -65,7 +65,6 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
 
   bool _isAvoidStairMode = false;
 
-  final List<int> _pathCountList = List.generate(11, (index) => index + 5);
   int _pathCount = 10;
   late LatLng _currentPos;
 
