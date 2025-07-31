@@ -1,62 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-class BleScanner extends StatefulWidget {
-  const BleScanner({super.key});
-
+class BLEChatPage extends StatefulWidget {
   @override
-  State<BleScanner> createState() => _BleScannerState();
+  _BLEChatPageState createState() => _BLEChatPageState();
 }
 
-class _BleScannerState extends State<BleScanner> {
-  final FlutterReactiveBle _ble = FlutterReactiveBle();
-  late Stream<DiscoveredDevice> _scanStream;
-  final List<DiscoveredDevice> _devices = [];
+class _BLEChatPageState extends State<BLEChatPage> {
+  final flutterReactiveBle = FlutterReactiveBle();
+  final Uuid serviceUuid = Uuid.parse("12345678-1234-5678-1234-56789abcdef0");
+  final Uuid charUuid = Uuid.parse("abcdefab-1234-5678-1234-56789abcdef0");
 
-  @override
-  void initState() {
-    super.initState();
-    _startScan();
+  DiscoveredDevice? _targetDevice;
+  QualifiedCharacteristic? _chatChar;
+  String _log = '';
+  final TextEditingController _controller = TextEditingController();
+
+  void _startScan() {
+    setState(() => _log = '🔍 Scanning...');
+    flutterReactiveBle.scanForDevices(withServices: [serviceUuid]).listen((device) {
+      if (device.name == 'PiChat') {
+        setState(() {
+          _targetDevice = device;
+          _log = '✅ Found ${device.name}';
+        });
+        _connectToDevice(device);
+      }
+    });
   }
 
-  Future<void> _startScan() async {
-    // 📛 권한 요청
-    if (await Permission.location.request().isGranted &&
-        await Permission.bluetoothScan.request().isGranted) {
-      _scanStream = _ble.scanForDevices(
-        withServices: [], // <-- 모든 BLE 장치 탐색
-        scanMode: ScanMode.lowLatency,
-      );
+  void _connectToDevice(DiscoveredDevice device) async {
+    await flutterReactiveBle.connectToDevice(id: device.id).listen((event) {
+      if (event.connectionState == DeviceConnectionState.connected) {
+        _log += '\n🔗 Connected!';
+        _chatChar = QualifiedCharacteristic(
+          serviceId: serviceUuid,
+          characteristicId: charUuid,
+          deviceId: device.id,
+        );
+        _listenForMessages();
+      }
+    });
+  }
 
-      _scanStream.listen((device) {
-        if (_devices.indexWhere((d) => d.id == device.id) == -1) {
-          setState(() {
-            _devices.add(device);
-          });
-        }
-      }, onError: (error) {
-        print('스캔 중 오류 발생: $error');
+  void _sendMessage(String msg) async {
+    if (_chatChar == null) return;
+    await flutterReactiveBle.writeCharacteristicWithResponse(
+      _chatChar!,
+      value: msg.codeUnits,
+    );
+    setState(() => _log += '\n👤 Me: $msg');
+    _controller.clear();
+  }
+
+  void _listenForMessages() {
+    flutterReactiveBle.subscribeToCharacteristic(_chatChar!).listen((data) {
+      setState(() {
+        _log += '\n🤖 Pi: ${String.fromCharCodes(data)}';
       });
-    } else {
-      print('블루투스 또는 위치 권한이 없습니다.');
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("BLE 스캐너")),
-      body: ListView.builder(
-        itemCount: _devices.length,
-        itemBuilder: (context, index) {
-          final device = _devices[index];
-          return ListTile(
-            title: Text(device.name.isNotEmpty ? device.name : '(이름 없음)'),
-            subtitle: Text(device.id),
-            trailing: Text("${device.rssi} dBm"),
-          );
-        },
+      appBar: AppBar(title: Text('BLE Chat with Pi')),
+      body: Column(
+        children: [
+          ElevatedButton(
+            onPressed: _startScan,
+            child: Text('🔍 Scan and Connect'),
+          ),
+          Expanded(child: SingleChildScrollView(child: Text(_log))),
+          Row(
+            children: [
+              Expanded(child: TextField(controller: _controller)),
+              IconButton(
+                icon: Icon(Icons.send),
+                onPressed: () => _sendMessage(_controller.text),
+              )
+            ],
+          )
+        ],
       ),
     );
   }

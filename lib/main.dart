@@ -31,7 +31,7 @@ void main() {
       home: MainApp(),
       //home: DialogTest(),
       //home: Directionindicator(),
-      //home: BleScanner(),
+      //home: BLEChatPage(),
     ),
   );
 }
@@ -63,13 +63,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
 
   static const _animDuration = Duration(milliseconds: 500);
 
-  final Map<String, String> _pathModes = {
-    "기본": "0",
-    "대로 우선": "4",
-    "최단 거리": "10",
-    "최단 거리 + 계단 제외": "30",
-  };
-  String _pathMode = "기본";
+  bool _isAvoidStairMode = false;
 
   final List<int> _pathCountList = List.generate(11, (index) => index + 5);
   int _pathCount = 10;
@@ -239,7 +233,7 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
       endLat: APIService.selectedPos.latitude,
       endLng: APIService.selectedPos.longitude,
 
-      pathMode: _pathModes[_pathMode]!,
+      pathMode: _isAvoidStairMode ? "0" : "30",
     );
 
     if (routeData != [] &&
@@ -520,17 +514,6 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
     return result;
   }
 
-  String convertAngleToNSWE(double angle) {
-    angle %= 360;
-
-    if (angle >= 315 || angle < 45) return 'N';
-    if (angle >= 45 && angle < 135) return 'E';
-    if (angle >= 135 && angle < 225) return 'S';
-    if (angle >= 225 && angle < 315) return 'W';
-
-    return "Unknown";
-  }
-
   Future<Map<String, double>> calculateVibrationType(LatLng target) async {
     // 사용자 위치랑 매개변수 위치
     Position currentPos = await Geolocator.getCurrentPosition(
@@ -605,7 +588,9 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
                   final angle = vibrationInfo.values.first;
 
                   if ((angle - heading).abs() > _angleThreshold) {
-                    // TODO: 블루투스에 angle & 패턴 전송
+                    // TODO : 블루투스에 angle & 패턴 전송
+                  } else if ((angle - heading).abs() > 50) {
+                    // TODO : 경로 이탈 처리
                   }
                 })
             as StreamSubscription<CompassEvent>?;
@@ -780,6 +765,32 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
                 ),
 
                 SizedBox(height: 30),
+
+                Center(
+                  child: Column(
+                    children: [
+                      Switch(
+                        value: _isAvoidStairMode,
+                        onChanged: (value) {
+                          setState(() {
+                            _isAvoidStairMode = value;
+                          });
+                        },
+                        activeColor: borderColor,
+                        inactiveThumbColor: Colors.grey,
+                      ),
+
+                      Text(
+                        _isAvoidStairMode ? "계단 회피" : "기본",
+                        style: TextStyle(
+                            color: _isAvoidStairMode ? textColor : Colors.grey,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               ],
             ),
           ),
@@ -846,22 +857,10 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
                       const SizedBox(width: 20),
 
                       // 시작 버튼
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(vertical: 85),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 20,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(width: 2, color: borderColor),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '시작',
-                            style: TextStyle(color: borderColor),
-                          ),
+                      ElevatedButton(
+                        child: Text(
+                          '시작',
+                          style: TextStyle(color: borderColor),
                         ),
                         onPressed: () async {
                           if (!_startNavi) {
@@ -869,245 +868,42 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
                             print("no_movement_notice");
 
                             await playAudio(
-                              "no_movement_notice.mp3",
-                              onComplete: () {
-                                () async {
-                                  _startListeningToCompass();
-                                  calculateAngleData();
+                            "no_movement_notice.mp3",
+                            onComplete: () {
+                              () async {
+                                _startListeningToCompass();
+                                calculateAngleData();
 
-                                  try {
-                                    await Clipboard.setData(
-                                      ClipboardData(text: getAngleString()),
+                                try {
+                                  await Clipboard.setData(
+                                    ClipboardData(text: getAngleString()),
+                                  );
+                                } catch (e, stackTrace) {
+                                  String errorMessage =
+                                      "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
+                                  print(errorMessage);
+
+                                  await Clipboard.setData(
+                                    ClipboardData(text: errorMessage),
+                                  );
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('내부 오류 발생. 에러메시지 복사됨.'),
+                                      ),
                                     );
-                                  } catch (e, stackTrace) {
-                                    String errorMessage =
-                                        "❗️에러 발생: $e\n📍StackTrace:\n$stackTrace";
-                                    print(errorMessage);
-
-                                    await Clipboard.setData(
-                                      ClipboardData(text: errorMessage),
-                                    );
-
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('내부 오류 발생. 에러메시지 복사됨.'),
-                                        ),
-                                      );
-                                    }
                                   }
+                                }
 
-                                  _startNavigation();
-                                }(); // 즉시 실행 async
-                              },
+                                _startNavigation();
+                              }(); // 즉시 실행 async
+                            },
                             );
                           }
                         },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          if (isMenuOpen)
-            GestureDetector(
-              onTap: toggleMenu,
-              child: Container(
-                color: Colors.transparent, // 투명
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-
-          // 설정탭
-          SlideTransition(
-            position: _slideAnim,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: (screenWidth * 55 / 100),
-                  height: (screenHeight * 95 / 100),
-
-                  decoration: BoxDecoration(
-                    color: Color.fromRGBO(250, 250, 250, 1),
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    border: Border.all(width: 2, color: borderColor),
-                  ),
-
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 100),
-
-                      Column(
-                        children: [
-                          Text(
-                            "경로 성격 설정",
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Padding(
-                            padding: EdgeInsets.only(left: 30),
-                            child: DropdownButton(
-                              value: _pathMode,
-                              hint: const Text("경로 설정"),
-                              items: _pathModes.keys.map((item) {
-                                return DropdownMenuItem(
-                                  value: item,
-                                  child: Text(item),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (_pathMode != value) {
-                                  setState(() {
-                                    _pathMode = value!;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-
-                          // 나중에 설정값 추가할 때, 구분선 넣고 추가하기
-                          SizedBox(height: 20),
-
-                          Divider(
-                            color: Colors.grey,
-                            thickness: 1,
-                            height: 20,
-                            indent: 30,
-                            endIndent: 30,
-                          ),
-
-                          SizedBox(height: 20),
-
-                          Text(
-                            "목적지 검색 개수",
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
-                          Text(
-                            '$_pathCount',
-                            style: TextStyle(fontSize: 12, color: Colors.black),
-                          ),
-                          SizedBox(height: 10),
-                          CupertinoButton(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  width: 2,
-                                  color: borderColor,
-                                ),
-                              ),
-                              alignment: Alignment.center, // 텍스트 위치 맞추기
-                              padding: EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 20,
-                              ),
-                              child: Text(
-                                '개수 선택',
-                                style: TextStyle(color: textColor),
-                              ),
-                            ),
-                            onPressed: () {
-                              showCupertinoModalPopup(
-                                context: context,
-                                builder: (_) => Container(
-                                  height: 300,
-                                  color: Colors.white,
-                                  child: Column(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                        ),
-                                        alignment: Alignment.centerRight,
-                                        child: CupertinoButton(
-                                          padding: EdgeInsets.zero,
-                                          child: Text(
-                                            "완료",
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: CupertinoPicker(
-                                          itemExtent: 40,
-                                          scrollController:
-                                              FixedExtentScrollController(
-                                                initialItem: _pathCount - 5,
-                                              ),
-                                          onSelectedItemChanged: (index) {
-                                            final newValue =
-                                                _pathCountList[index];
-                                            if (_pathCount != newValue) {
-                                              setState(() {
-                                                _pathCount = newValue;
-                                              });
-                                            }
-                                          },
-                                          children: _pathCountList
-                                              .map(
-                                                (e) =>
-                                                    Center(child: Text('$e')),
-                                              )
-                                              .toList(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          Visibility(
-            visible: !_submitted,
-            child: AnimatedOpacity(
-              opacity: _submitted ? 0 : 1,
-              duration: _animDuration,
-              child: SafeArea(
-                child: Container(
-                  height: 100,
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      IconButton(
-                        icon: AnimatedIcon(
-                          icon: AnimatedIcons.menu_close,
-                          progress: _slideAnimController,
-                          color: Colors.black,
-                          size: 28,
-                        ),
-                        onPressed: toggleMenu,
                       ),
                     ],
                   ),
@@ -1175,7 +971,7 @@ class APIService {
                               ),
                             );
 
-                            Navigator.pop(context);
+                            Navigator.of(context).pop();
                             onPlaceSelected(selectedName, selectedPos);
                           },
                           child: Padding(
@@ -1186,16 +982,18 @@ class APIService {
                                 Text(
                                   places[index].keys.first.split("|||").first,
                                   style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black
                                   ),
                                 ),
                                 SizedBox(height: 4),
                                 Text(
                                   places[index].keys.first.split("|||").last,
                                   style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w300,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w300,
+                                      color: Colors.black
                                   ),
                                 ),
                               ],
