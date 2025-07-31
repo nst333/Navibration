@@ -51,10 +51,6 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
-  late AnimationController _slideAnimController;
-  late Animation<Offset> _slideAnim;
-  bool isMenuOpen = false;
-
   bool _submitted = false;
   bool _focused = false;
   bool _isEnterSplash = true;
@@ -92,13 +88,13 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Future.delayed(Duration(seconds: 2), () {
-    //   if (mounted) {
-    //     setState(() {
-    //       _isEnterSplash = false;
-    //     });
-    //   }
-    // });
+    Future.delayed(Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isEnterSplash = false;
+        });
+      }
+    });
 
     _controller.addListener(() {
       if (_controller.text.isEmpty && _submitted) {
@@ -119,29 +115,6 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
           });
         }
       }
-    });
-
-    _slideAnimController = AnimationController(
-      vsync: this,
-      duration: _animDuration,
-    );
-
-    _slideAnim = Tween<Offset>(begin: Offset(-1, 0), end: Offset(0, 0)).animate(
-      CurvedAnimation(
-        parent: _slideAnimController,
-        curve: Curves.easeInOutQuint,
-      ),
-    );
-  }
-
-  void toggleMenu() {
-    setState(() {
-      if (isMenuOpen) {
-        _slideAnimController.reverse();
-      } else {
-        _slideAnimController.forward();
-      }
-      isMenuOpen = !isMenuOpen;
     });
   }
 
@@ -175,7 +148,6 @@ class _MainAppState extends State<MainApp> with SingleTickerProviderStateMixin {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
-    _slideAnimController.dispose();
     _compassSub?.cancel();
     super.dispose();
   }
